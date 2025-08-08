@@ -157,7 +157,7 @@ resource VMSS 'Microsoft.Compute/virtualMachineScaleSets@2021-07-01' = {
   sku: {
     name: computeSizeLookupOptions['${AppServer.ROLE}-${VMSizeLookup[Environment]}']
     tier: 'Standard'
-    capacity: AppServer.AutoScalecapacity.minimum
+5~    capacity: AppServer.AutoScalecapacity.minimum
   }
   zones: contains(AppServer, 'zones') ? AppServer.zones : [
     '1'
@@ -176,7 +176,7 @@ resource VMSS 'Microsoft.Compute/virtualMachineScaleSets@2021-07-01' = {
     }
     virtualMachineProfile: {
       priority: 'Regular'
-      #evictionPolicy: 'Deallocate'
+      //evictionPolicy: 'Deallocate'
       licenseType: contains(OSType[AppServer.OSType], 'licenseType') ? OSType[AppServer.OSType].licenseType : null
       osProfile: {
         computerNamePrefix: VM.vmHostName
