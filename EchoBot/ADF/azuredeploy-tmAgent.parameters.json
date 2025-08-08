@@ -281,8 +281,8 @@
             ],
             "AutoScalecapacity": {
               "minimum": "2",
-              "maximum": "9",
-              "default": "3"
+              "maximum": "3",
+              "default": "2"
             },
             "Health": {
               "protocol": "https",
