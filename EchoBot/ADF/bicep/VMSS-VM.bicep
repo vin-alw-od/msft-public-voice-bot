@@ -157,7 +157,7 @@ resource VMSS 'Microsoft.Compute/virtualMachineScaleSets@2021-07-01' = {
   sku: {
     name: computeSizeLookupOptions['${AppServer.ROLE}-${VMSizeLookup[Environment]}']
     tier: 'Standard'
-5~    capacity: AppServer.AutoScalecapacity.minimum
+    capacity: AppServer.AutoScalecapacity.minimum
   }
   zones: contains(AppServer, 'zones') ? AppServer.zones : [
     '1'
