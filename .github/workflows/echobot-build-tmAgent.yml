@@ -5,14 +5,14 @@ on:
     branches:
       - 'main'
     paths:
-      - './Samples/PublicSamples/EchoBot/src/**'
+      - './EchoBot/src/**'
       - .github/workflows/echobot-build-tmAgent.yml
 
   pull_request:
     branches:
       - 'main'
     paths:
-      - './Samples/PublicSamples/EchoBot/src/**'
+      - './EchoBot/src/**'
       - .github/workflows/echobot-build-tmAgent.yml
 
   workflow_dispatch:
@@ -45,14 +45,14 @@ jobs:
       run: | 
         echo "${{ env.Base }}/${{ env.Component }}/${{ env.BuildName }}/"
     - uses: nuget/setup-nuget@v1
-    - run: nuget restore Samples\PublicSamples\EchoBot\src\EchoBot.sln
+    - run: nuget restore EchoBot\src\EchoBot.sln
     
     - name: Create Build Directory
       run: mkdir ${{ env.Base }}/${{ env.Component }}/${{ env.BuildName }}/
     
     - name: Build Solution
       run: |
-        msbuild.exe Samples\PublicSamples\EchoBot\src\EchoBot.sln /nologo /p:platform="x64" /p:OutDir=${{ github.workspace }}/${{ env.Base }}/${{ env.Component }}/${{ env.BuildName }}/
+        msbuild.exe EchoBot\src\EchoBot.sln /nologo /p:platform="x64" /p:OutDir=${{ github.workspace }}/${{ env.Base }}/${{ env.Component }}/${{ env.BuildName }}/
         
     - name: Run pwsh
       shell: pwsh
@@ -80,7 +80,7 @@ jobs:
             OrgName       = $env:OrgName
             Location      = $env:location
           }
-          & ./Samples/PublicSamples/EchoBot/ADF/release-az/Sync-AzBuildComponent.ps1 @Params
+          & ./EchoBot/ADF/release-az/Sync-AzBuildComponent.ps1 @Params
         azPSVersion: latest
 
     - name: G1_RG_UpdateBuildMeta_to_Blob
@@ -99,7 +99,7 @@ jobs:
             Location      = $env:location
             Environment   = $env:Environment
           }
-          & ./Samples/PublicSamples/EchoBot/ADF/release-az/Update-AzBuildMetaData.ps1 @Params
+          & ./EchoBot/ADF/release-az/Update-AzBuildMetaData.ps1 @Params
         azPSVersion: latest
 
 

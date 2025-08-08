@@ -8,14 +8,14 @@ on:
     branches:
       - 'main'
     paths:
-      - './Samples/PublicSamples/EchoBot/ADF/**'
+      - './EchoBot/ADF/**'
       - .github/workflows/echobot-infra-tmAgent.yml
 
   pull_request:
     branches:
       - 'main'
     paths:
-      - './Samples/PublicSamples/EchoBot/ADF/**'
+      - './EchoBot/ADF/**'
       - .github/workflows/echobot-infra-tmAgent.yml
 
   # Allows you to run this workflow manually from the Actions tab
@@ -50,7 +50,7 @@ jobs:
               Location        = $env:location
               FullUpload      = $true
             }
-            ./Samples/PublicSamples/EchoBot/ADF/main.ps1 @Params
+            ./EchoBot/ADF/main.ps1 @Params
             if ($e){throw $e}
 
 
