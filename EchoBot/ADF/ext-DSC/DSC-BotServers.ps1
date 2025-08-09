@@ -409,6 +409,23 @@ Configuration $Configuration
             $dependsonAZCopyDSCDir += @("[AppReleaseDSC]$($AppComponent.ComponentName)")
         }
 
+        #------------------------------------------------------------------
+        # Vinod
+        # Build a common dependency list for app payload installs
+	$apps = @()
+	if ($dependsonAZCopyDSCDir)       { $apps += $dependsonAZCopyDSCDir }
+	if ($dependsonPackage)            { $apps += $dependsonPackage }
+	if ($dependsonProvisionedPackage) { $apps += $dependsonProvisionedPackage }
+	if ($dependsonDir)                { $apps += $dependsonDir }
+
+	# Extra guard: wait until the EXE is actually on disk
+	Script WaitForEchoBotExe {
+	    TestScript = { Test-Path 'C:\API\EchoBot\EchoBot.exe' }
+	    SetScript  = { Start-Sleep -Seconds 10 }
+	    GetScript  = { @{ Result = 'Waiting' } }
+	    DependsOn  = $apps
+	}
+
         #-------------------------------------------------------------------
         # Non PATH envs
         foreach ($EnvironmentVar in $Node.EnvironmentVarPresentVMSS)
@@ -710,7 +727,7 @@ Configuration $Configuration
                 Description = $NewService.Description 
                 StartupType = $NewService.StartupType
                 State       = $NewService.State
-                DependsOn   = $apps 
+                DependsOn   = $apps + '[Script]WaitForEchoBotExe' 
             }
             $dependsonService += @("[Service]$($Name)")
         }

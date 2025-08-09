@@ -153,19 +153,6 @@
                 }
             )
 
-	    $apps = @()
-$apps += $dependsonAZCopyDSCDir
-$apps += $dependsonPackage
-$apps += $dependsonProvisionedPackage
-$apps += $dependsonDirectory
-
-# Extra guard: wait until the EXE exists
-Script WaitForEchoBotExe {
-  TestScript = { Test-Path 'C:\API\EchoBot\EchoBot.exe' }
-  SetScript  = { Start-Sleep -Seconds 10 }
-  GetScript  = { @{ Result = 'Waiting' } }
-  DependsOn  = $apps
-}
 
             NewServicePresent           = @(
                 @{
@@ -174,7 +161,6 @@ Script WaitForEchoBotExe {
                     State       = 'Running'
                     StartupType = 'Automatic'
                     Description = 'Echo Bot Service'
-		    DependsOn   = $apps + '[Script]WaitForEchoBotExe'
                 }
             )
 
