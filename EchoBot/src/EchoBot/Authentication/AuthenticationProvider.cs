@@ -96,9 +96,9 @@ namespace EchoBot.Authentication
             const string oauthV2TokenLink = "https://login.microsoftonline.com/{tenant}";
             const string resource = "https://graph.microsoft.com";
 
-            // If no tenant was specified, we craft the token link using the common tenant.
+            // If no tenant was specified, we craft the token link using the specific tenant to avoid Conditional Access issues.
             // https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-v2-protocols#endpoints
-            tenant = string.IsNullOrWhiteSpace(tenant) ? "common" : tenant;
+            tenant = string.IsNullOrWhiteSpace(tenant) ? "0ea962ad-9b96-4118-9def-b1e63bb26879" : tenant;
             var tokenLink = oauthV2TokenLink.Replace(replaceString, tenant);
             var scopes = new string[] { $"{resource}/.default" };
 
