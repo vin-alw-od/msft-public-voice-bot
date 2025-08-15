@@ -52,6 +52,12 @@ namespace EchoBot.Bot
             this.Call.OnUpdated += this.CallOnUpdated;
             this.Call.Participants.OnUpdated += this.ParticipantsOnUpdated;
 
+            // Set the call ID immediately when creating the handler
+            if (_llmSpeechService != null)
+            {
+                _llmSpeechService.SetCurrentCallId(this.Call.Id);
+            }
+
             this.BotMediaStream = new BotMediaStream(this.Call.GetLocalMediaSession(), this.Call.Id, this.GraphLogger, logger, settings, llmSpeechService);
         }
 
@@ -85,11 +91,11 @@ namespace EchoBot.Bot
                 // Call is established - start LLM speech service with initial greeting
                 if (_llmSpeechService != null)
                 {
-                    _llmSpeechService.SetCurrentCallId(this.Call.Id);
                     _ = Task.Run(async () =>
                     {
                         try
                         {
+                            GraphLogger.Info($"Call established, starting LLM speech service for call: {this.Call.Id}");
                             await _llmSpeechService.StartAsync();
                         }
                         catch (Exception ex)
@@ -97,6 +103,10 @@ namespace EchoBot.Bot
                             GraphLogger.Error($"Failed to start LLM speech service: {ex.Message}");
                         }
                     });
+                }
+                else
+                {
+                    GraphLogger.Warn("LLM Speech Service is null - bot will be silent");
                 }
             }
 

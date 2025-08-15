@@ -122,18 +122,27 @@ namespace EchoBot.Media
         /// </summary>
         private async Task<string> GetOrCreateSessionAsync(string callId)
         {
+            _logger.LogInformation("GetOrCreateSessionAsync called for call ID: {CallId}", callId ?? "NULL");
+            
             if (string.IsNullOrEmpty(callId))
+            {
+                _logger.LogError("Call ID is null or empty in GetOrCreateSessionAsync");
                 return null;
+            }
 
             if (_callSessions.TryGetValue(callId, out string existingSessionId))
             {
+                _logger.LogInformation("Found existing session {SessionId} for call {CallId}", existingSessionId, callId);
                 return existingSessionId;
             }
 
             try
             {
+                _logger.LogInformation("Starting new survey session via LLM service for call: {CallId}", callId);
                 // Start new survey session
                 var response = await _llmService.StartSurveyAsync($"teams_call_{callId}");
+                
+                _logger.LogInformation("LLM service response: {Response}", response);
                 
                 // Extract session ID from response (format: "SESSION_ID:xxx|message")
                 if (response.StartsWith("SESSION_ID:"))
@@ -142,12 +151,15 @@ namespace EchoBot.Media
                     var sessionId = parts[0].Substring("SESSION_ID:".Length);
                     var initialMessage = parts.Length > 1 ? parts[1] : "Hello! I'm here to collect information about your AI initiatives.";
 
+                    _logger.LogInformation("Parsed session ID: {SessionId}, initial message: {Message}", sessionId, initialMessage);
+
                     _callSessions.TryAdd(callId, sessionId);
 
                     // Speak the initial greeting
+                    _logger.LogInformation("About to synthesize initial greeting for call: {CallId}", callId);
                     await SynthesizeTextAsync(initialMessage);
 
-                    _logger.LogInformation("Created new LLM session {SessionId} for call {CallId}", sessionId, callId);
+                    _logger.LogInformation("Successfully created LLM session {SessionId} for call {CallId}", sessionId, callId);
                     return sessionId;
                 }
                 else
@@ -190,10 +202,17 @@ namespace EchoBot.Media
         /// </summary>
         public async Task StartAsync()
         {
+            _logger.LogInformation("StartAsync called for call ID: {CallId}", _currentCallId ?? "NULL");
+            
             // Start with an initial greeting when the call begins
             if (!string.IsNullOrEmpty(_currentCallId))
             {
+                _logger.LogInformation("Creating session and triggering initial greeting for call: {CallId}", _currentCallId);
                 await GetOrCreateSessionAsync(_currentCallId);
+            }
+            else
+            {
+                _logger.LogError("Cannot start LLM speech service - current call ID is null or empty");
             }
         }
 
