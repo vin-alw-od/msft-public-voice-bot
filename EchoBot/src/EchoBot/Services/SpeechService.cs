@@ -32,6 +32,13 @@ namespace EchoBot.Services
             _logger.LogInformation("SpeechConfigRegion: {Region}", string.IsNullOrEmpty(speechRegion) ? "NULL/EMPTY" : speechRegion);
             _logger.LogInformation("BotLanguage: {Language}", botLanguage);
             
+            // Debug: Log all configuration keys to see what's available
+            _logger.LogInformation("Available configuration keys containing 'Speech':");
+            foreach (var kvp in configuration.AsEnumerable().Where(x => x.Key.Contains("Speech", StringComparison.OrdinalIgnoreCase)))
+            {
+                _logger.LogInformation("Config Key: {Key}, Value: {Value}", kvp.Key, string.IsNullOrEmpty(kvp.Value) ? "NULL/EMPTY" : "SET");
+            }
+            
             if (string.IsNullOrEmpty(speechKey) || string.IsNullOrEmpty(speechRegion))
             {
                 _logger.LogWarning("Speech service not configured. SpeechConfigKey and SpeechConfigRegion are required.");
