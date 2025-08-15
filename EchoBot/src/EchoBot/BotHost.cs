@@ -83,11 +83,10 @@ namespace EchoBot
 
             builder.Services.AddSingleton<IBotService, BotService>();
 
-            // Add HTTP client for LLM API
+            // Add HTTP client for LLM API (this also registers ILLMService as transient)
             builder.Services.AddHttpClient<ILLMService, LLMService>();
             
-            // Add LLM and Speech services
-            builder.Services.AddSingleton<ILLMService, LLMService>();
+            // Add Speech services
             builder.Services.AddSingleton<ISpeechService, Services.SpeechService>();
             builder.Services.AddSingleton<LLMSpeechService>();
 

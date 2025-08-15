@@ -23,9 +23,9 @@ namespace EchoBot.Services
         {
             _logger = logger;
             
-            var speechKey = configuration.GetValue<string>("SpeechConfigKey");
-            var speechRegion = configuration.GetValue<string>("SpeechConfigRegion");
-            var botLanguage = configuration.GetValue<string>("BotLanguage") ?? "en-US";
+            var speechKey = configuration.GetValue<string>("AppSettings:SpeechConfigKey");
+            var speechRegion = configuration.GetValue<string>("AppSettings:SpeechConfigRegion");
+            var botLanguage = configuration.GetValue<string>("AppSettings:BotLanguage") ?? "en-US";
             
             if (string.IsNullOrEmpty(speechKey) || string.IsNullOrEmpty(speechRegion))
             {
