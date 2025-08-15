@@ -62,6 +62,8 @@ namespace EchoBot.Media
         {
             try
             {
+                _logger.LogInformation("🎤 Processing audio buffer for call {CallId}, Length: {Length} bytes", callId, audioBuffer.Length);
+                
                 // Set the current call context
                 SetCurrentCallId(callId);
                 
@@ -69,18 +71,26 @@ namespace EchoBot.Media
                 var audioData = new byte[audioBuffer.Length];
                 Marshal.Copy(audioBuffer.Data, audioData, 0, (int)audioBuffer.Length);
                 
+                _logger.LogInformation("🔊 Converted audio buffer to byte array, sending to speech recognition...");
+                
                 using var audioStream = new MemoryStream(audioData);
                 var recognizedText = await _speechService.SpeechToTextAsync(audioStream);
                 
+                _logger.LogInformation("🎯 Speech recognition result: '{Text}' (Empty: {IsEmpty})", recognizedText ?? "NULL", string.IsNullOrEmpty(recognizedText));
+                
                 if (!string.IsNullOrEmpty(recognizedText))
                 {
-                    _logger.LogInformation("Recognized speech: {Text}", recognizedText);
+                    _logger.LogInformation("✅ Processing recognized speech: {Text}", recognizedText);
                     await ProcessRecognizedSpeechAsync(recognizedText);
+                }
+                else
+                {
+                    _logger.LogInformation("⏭️ Skipping empty speech recognition result");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing audio for call {CallId}", callId);
+                _logger.LogError(ex, "❌ Error processing audio for call {CallId}", callId);
             }
         }
 

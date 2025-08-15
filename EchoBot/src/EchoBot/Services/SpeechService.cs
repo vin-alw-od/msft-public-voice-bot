@@ -78,7 +78,7 @@ namespace EchoBot.Services
 
             try
             {
-                _logger.LogInformation("Starting speech-to-text conversion");
+                _logger.LogInformation("Starting speech-to-text conversion for stream with length: {Length}", audioStream.Length);
 
                 // Convert stream to the format expected by Speech SDK
                 using var audioConfig = AudioConfig.FromStreamInput(AudioInputStream.CreatePushStream());
@@ -94,32 +94,40 @@ namespace EchoBot.Services
                 // Read audio stream and push to recognizer
                 var buffer = new byte[1024];
                 int bytesRead;
+                int totalBytesRead = 0;
                 while ((bytesRead = await audioStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                 {
                     pushStream.Write(buffer, bytesRead);
+                    totalBytesRead += bytesRead;
                 }
                 pushStream.Close();
+                
+                _logger.LogInformation("Pushed {TotalBytes} bytes to speech recognizer", totalBytesRead);
 
                 // Recognize speech
+                _logger.LogInformation("⏳ Starting speech recognition...");
                 var result = await recognizer.RecognizeOnceAsync();
+                _logger.LogInformation("🎯 Speech recognition completed with reason: {Reason}", result.Reason);
 
                 switch (result.Reason)
                 {
                     case ResultReason.RecognizedSpeech:
-                        _logger.LogInformation("Speech recognized: {Text}", result.Text);
+                        _logger.LogInformation("✅ Speech recognized successfully: '{Text}' (Confidence: {Confidence})", result.Text, result.Properties.GetProperty(PropertyId.SpeechServiceResponse_JsonResult));
                         return result.Text;
                     
                     case ResultReason.NoMatch:
-                        _logger.LogWarning("No speech could be recognized");
+                        _logger.LogWarning("❌ No speech could be recognized - audio may be silence, noise, or unrecognizable");
+                        _logger.LogWarning("🔍 NoMatch details: {Details}", result.Properties.GetProperty(PropertyId.SpeechServiceResponse_JsonResult));
                         return string.Empty;
                     
                     case ResultReason.Canceled:
                         var cancellation = CancellationDetails.FromResult(result);
-                        _logger.LogError("Speech recognition canceled: {Reason}, {Details}", cancellation.Reason, cancellation.ErrorDetails);
+                        _logger.LogError("🚫 Speech recognition canceled - Reason: {Reason}, Error: {ErrorCode}, Details: {Details}", 
+                            cancellation.Reason, cancellation.ErrorCode, cancellation.ErrorDetails);
                         throw new InvalidOperationException($"Speech recognition canceled: {cancellation.ErrorDetails}");
                     
                     default:
-                        _logger.LogError("Unexpected speech recognition result: {Reason}", result.Reason);
+                        _logger.LogError("❓ Unexpected speech recognition result: {Reason}", result.Reason);
                         throw new InvalidOperationException($"Unexpected speech recognition result: {result.Reason}");
                 }
             }
