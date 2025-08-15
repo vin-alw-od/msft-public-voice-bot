@@ -202,25 +202,25 @@ namespace EchoBot.Media
         /// </summary>
         public async Task StartAsync()
         {
-            _logger.LogInformation("StartAsync called for call ID: {CallId}", _currentCallId ?? "NULL");
+            _logger.LogError("🔥 CRITICAL DEBUG: StartAsync called for call ID: {CallId}", _currentCallId ?? "NULL");
             
             // Start with an initial greeting when the call begins
             if (!string.IsNullOrEmpty(_currentCallId))
             {
-                _logger.LogInformation("Creating session and triggering initial greeting for call: {CallId}", _currentCallId);
+                _logger.LogError("🔥 CRITICAL DEBUG: Creating session and triggering initial greeting for call: {CallId}", _currentCallId);
                 try
                 {
                     await GetOrCreateSessionAsync(_currentCallId);
-                    _logger.LogInformation("StartAsync completed successfully for call: {CallId}", _currentCallId);
+                    _logger.LogError("🔥 CRITICAL DEBUG: StartAsync completed successfully for call: {CallId}", _currentCallId);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in StartAsync for call: {CallId}", _currentCallId);
+                    _logger.LogError(ex, "🔥 CRITICAL DEBUG: Error in StartAsync for call: {CallId}", _currentCallId);
                 }
             }
             else
             {
-                _logger.LogError("Cannot start LLM speech service - current call ID is null or empty");
+                _logger.LogError("🔥 CRITICAL DEBUG: Cannot start LLM speech service - current call ID is null or empty");
             }
         }
 

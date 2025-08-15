@@ -95,18 +95,19 @@ namespace EchoBot.Bot
                     {
                         try
                         {
-                            GraphLogger.Info($"Call established, starting LLM speech service for call: {this.Call.Id}");
+                            GraphLogger.Error($"🔥 CRITICAL DEBUG: Call established, starting LLM speech service for call: {this.Call.Id}");
                             await _llmSpeechService.StartAsync();
+                            GraphLogger.Error($"🔥 CRITICAL DEBUG: LLM speech service StartAsync completed for call: {this.Call.Id}");
                         }
                         catch (Exception ex)
                         {
-                            GraphLogger.Error($"Failed to start LLM speech service: {ex.Message}");
+                            GraphLogger.Error($"🔥 CRITICAL DEBUG: Failed to start LLM speech service: {ex.Message} | {ex.StackTrace}");
                         }
                     });
                 }
                 else
                 {
-                    GraphLogger.Warn("LLM Speech Service is null - bot will be silent");
+                    GraphLogger.Error("🔥 CRITICAL DEBUG: LLM Speech Service is null - bot will be silent");
                 }
             }
 
