@@ -250,10 +250,18 @@ namespace EchoBot.Bot
         /// </summary>
         /// <param name="sender">The LLM Speech service</param>
         /// <param name="e">The audio response event args</param>
-        private void OnLLMAudioResponse(object? sender, EchoBot.Bot.MediaStreamEventArgs e)
+        private async void OnLLMAudioResponse(object? sender, EchoBot.Bot.MediaStreamEventArgs e)
         {
             try
             {
+                // Wait for audio video frame player to be initialized
+                if (!startVideoPlayerCompleted.Task.IsCompleted) 
+                { 
+                    _logger.LogInformation("Audio video frame player not ready yet, waiting for initialization...");
+                    await startVideoPlayerCompleted.Task;
+                    _logger.LogInformation("Audio video frame player is now ready, playing LLM response");
+                }
+
                 if (this.audioVideoFramePlayer != null && e.AudioMediaBuffers?.Count > 0)
                 {
                     this.audioMediaBuffers = e.AudioMediaBuffers;
