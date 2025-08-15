@@ -33,6 +33,9 @@ ENV/
 *.csv
 Test_*.csv
 
+# TXT files (Conversation files)
+*.txt
+
 # Windows specific files
 "C:\\*"
 
