@@ -1,5 +1,6 @@
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
+using Microsoft.Graph.Communications.Calls.Media;
 using Microsoft.Skype.Bots.Media;
 using System.Runtime.InteropServices;
 using EchoBot.Bot;
@@ -267,9 +268,9 @@ namespace EchoBot.Media
                 {
                     _logger.LogInformation("Generated {Length} bytes of audio", audioBytes.Length);
                     
-                    // Convert audio bytes to AudioMediaBuffers
+                    // Convert audio bytes to AudioMediaBuffers using the FIXED chunking method
                     var currentTick = DateTime.Now.Ticks;
-                    var audioMediaBuffers = Utilities.CreateAudioMediaBuffers(audioBytes, currentTick, _logger);
+                    var audioMediaBuffers = CreateAudioMediaBuffersFromBytes(audioBytes, currentTick);
                     
                     // Trigger the AudioResponse event
                     if (audioMediaBuffers?.Count > 0)
@@ -292,6 +293,52 @@ namespace EchoBot.Media
             {
                 _logger.LogError(ex, "Failed to synthesize text: {Text}", text);
             }
+        }
+
+        /// <summary>
+        /// Create audio media buffers from byte array, properly chunking into 20ms packets
+        /// Based on the working AudioDataStream method
+        /// </summary>
+        private List<AudioMediaBuffer> CreateAudioMediaBuffersFromBytes(byte[] buffer, long currentTick)
+        {
+            var audioMediaBuffers = new List<AudioMediaBuffer>();
+            var referenceTime = currentTick;
+            var numberOfTicksInOneAudioBuffers = 20 * 10000; // 20ms
+            var chunkSize = 640; // 20ms of PCM 16kHz audio
+
+            _logger.LogInformation($"Creating audio buffers from {buffer.Length} bytes of audio data");
+
+            // Split the large buffer into 640-byte chunks (20ms each)
+            for (int offset = 0; offset < buffer.Length; offset += chunkSize)
+            {
+                var bytesToCopy = Math.Min(chunkSize, buffer.Length - offset);
+                
+                // Allocate memory for this chunk
+                IntPtr unmanagedBuffer = Marshal.AllocHGlobal(bytesToCopy);
+                
+                try
+                {
+                    // Copy the chunk data
+                    Marshal.Copy(buffer, offset, unmanagedBuffer, bytesToCopy);
+                    
+                    // Create audio buffer for this chunk
+                    var audioBuffer = new AudioSendBuffer(unmanagedBuffer, (uint)bytesToCopy, AudioFormat.Pcm16K, referenceTime);
+                    audioMediaBuffers.Add(audioBuffer);
+                    
+                    // Advance reference time by 20ms
+                    referenceTime += numberOfTicksInOneAudioBuffers;
+                }
+                catch (Exception ex)
+                {
+                    // Clean up memory if something goes wrong
+                    Marshal.FreeHGlobal(unmanagedBuffer);
+                    _logger.LogError(ex, "Error creating audio buffer at offset {Offset}", offset);
+                    throw;
+                }
+            }
+
+            _logger.LogInformation($"Created {audioMediaBuffers.Count} AudioMediaBuffers from {buffer.Length} bytes");
+            return audioMediaBuffers;
         }
 
         public void Dispose()
