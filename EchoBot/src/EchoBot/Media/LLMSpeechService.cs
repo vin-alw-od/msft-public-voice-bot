@@ -23,7 +23,7 @@ namespace EchoBot.Media
         /// <summary>
         /// Event raised when audio response is ready to be played
         /// </summary>
-        public event EventHandler<MediaStreamEventArgs>? AudioResponse;
+        public event EventHandler<EchoBot.Bot.MediaStreamEventArgs>? AudioResponse;
 
         public LLMSpeechService(ILLMService llmService, ISpeechService speechService, ILogger<LLMSpeechService> logger)
         {
@@ -231,7 +231,7 @@ namespace EchoBot.Media
                     // Trigger the AudioResponse event
                     if (audioMediaBuffers?.Count > 0)
                     {
-                        var eventArgs = new MediaStreamEventArgs
+                        var eventArgs = new EchoBot.Bot.MediaStreamEventArgs
                         {
                             AudioMediaBuffers = audioMediaBuffers
                         };

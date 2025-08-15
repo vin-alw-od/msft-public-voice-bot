@@ -12,6 +12,7 @@
 // </copyright>
 // <summary>The bot media stream.</summary>
 // ***********************************************************************-
+using EchoBot.Bot;
 using EchoBot.Media;
 using EchoBot.Services;
 using EchoBot.Util;
@@ -249,7 +250,7 @@ namespace EchoBot.Bot
         /// </summary>
         /// <param name="sender">The LLM Speech service</param>
         /// <param name="e">The audio response event args</param>
-        private void OnLLMAudioResponse(object? sender, MediaStreamEventArgs e)
+        private void OnLLMAudioResponse(object? sender, EchoBot.Bot.MediaStreamEventArgs e)
         {
             try
             {
