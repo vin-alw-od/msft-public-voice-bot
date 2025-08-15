@@ -133,7 +133,8 @@ namespace EchoBot.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to convert speech to text");
+                _logger.LogError(ex, "💥 Exception in SpeechToTextAsync - Type: {ExceptionType}, Message: {Message}", ex.GetType().Name, ex.Message);
+                _logger.LogError("🔍 Stack trace: {StackTrace}", ex.StackTrace);
                 throw new InvalidOperationException("Failed to convert speech to text", ex);
             }
         }
