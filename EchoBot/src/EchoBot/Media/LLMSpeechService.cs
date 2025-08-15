@@ -36,6 +36,22 @@ namespace EchoBot.Media
         {
             _currentCallId = callId;
             _logger.LogInformation("LLM Speech Service initialized for call: {CallId}", callId);
+            
+            // Trigger initial greeting immediately after call ID is set
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(3000); // Wait 3 seconds for call to be ready
+                    _logger.LogError("🔥 Triggering initial greeting for call: {CallId}", callId);
+                    await GetOrCreateSessionAsync(callId);
+                    _logger.LogError("🔥 Initial greeting completed for call: {CallId}", callId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "🔥 Failed to trigger initial greeting for call: {CallId}", callId);
+                }
+            });
         }
 
         /// <summary>
