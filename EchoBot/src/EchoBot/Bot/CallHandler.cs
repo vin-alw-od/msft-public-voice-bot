@@ -59,6 +59,25 @@ namespace EchoBot.Bot
             }
 
             this.BotMediaStream = new BotMediaStream(this.Call.GetLocalMediaSession(), this.Call.Id, this.GraphLogger, logger, settings, llmSpeechService);
+            
+            // FALLBACK: Trigger initial greeting immediately when handler is created
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    GraphLogger.Error($"🔥 CRITICAL DEBUG: FALLBACK - Triggering initial greeting immediately for call: {this.Call.Id}");
+                    await Task.Delay(2000); // Wait 2 seconds for call to be ready
+                    if (_llmSpeechService != null)
+                    {
+                        await _llmSpeechService.StartAsync();
+                        GraphLogger.Error($"🔥 CRITICAL DEBUG: FALLBACK - Initial greeting completed for call: {this.Call.Id}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    GraphLogger.Error($"🔥 CRITICAL DEBUG: FALLBACK - Error triggering initial greeting: {ex.Message}");
+                }
+            });
         }
 
         /// <inheritdoc/>
@@ -84,7 +103,7 @@ namespace EchoBot.Bot
         /// <param name="e">The event args containing call changes.</param>
         private async void CallOnUpdated(ICall sender, ResourceEventArgs<Call> e)
         {
-            GraphLogger.Info($"Call status updated to {e.NewResource.State} - {e.NewResource.ResultInfo?.Message}");
+            GraphLogger.Error($"🔥 CRITICAL DEBUG: Call status updated from {e.OldResource.State} to {e.NewResource.State} - {e.NewResource.ResultInfo?.Message}");
 
             if (e.OldResource.State != e.NewResource.State && e.NewResource.State == CallState.Established)
             {
