@@ -2,7 +2,7 @@
 
 namespace EchoBot.Bot
 {
-    public class MediaStreamEventArgs
+    public class MediaStreamEventArgs : EventArgs
     {
         public List<AudioMediaBuffer> AudioMediaBuffers { get; set; }
     }

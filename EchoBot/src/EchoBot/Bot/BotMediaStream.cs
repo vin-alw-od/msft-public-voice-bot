@@ -13,6 +13,7 @@
 // <summary>The bot media stream.</summary>
 // ***********************************************************************-
 using EchoBot.Media;
+using EchoBot.Services;
 using EchoBot.Util;
 using Microsoft.Graph.Communications.Calls;
 using Microsoft.Graph.Communications.Calls.Media;
@@ -50,7 +51,8 @@ namespace EchoBot.Bot
         private AudioVideoFramePlayerSettings audioVideoFramePlayerSettings;
         private List<AudioMediaBuffer> audioMediaBuffers = new List<AudioMediaBuffer>();
         private int shutdown;
-        private readonly SpeechService _languageService;
+        private readonly LLMSpeechService _llmSpeechService;
+        private readonly string _callId;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BotMediaStream" /> class.
@@ -60,13 +62,15 @@ namespace EchoBot.Bot
         /// <param name="graphLogger">The Graph logger.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="settings">Azure settings</param>
+        /// <param name="llmSpeechService">The LLM Speech service for processing audio</param>
         /// <exception cref="InvalidOperationException">A mediaSession needs to have at least an audioSocket</exception>
         public BotMediaStream(
             ILocalMediaSession mediaSession,
             string callId,
             IGraphLogger graphLogger,
             ILogger logger,
-            AppSettings settings
+            AppSettings settings,
+            LLMSpeechService llmSpeechService
         )
             : base(graphLogger)
         {
@@ -76,6 +80,8 @@ namespace EchoBot.Bot
 
             _settings = settings;
             _logger = logger;
+            _callId = callId;
+            _llmSpeechService = llmSpeechService;
 
             this.participants = new List<IParticipant>();
 
@@ -95,10 +101,9 @@ namespace EchoBot.Bot
 
             this._audioSocket.AudioMediaReceived += this.OnAudioMediaReceived;
 
-            if (_settings.UseSpeechService)
+            if (_settings.UseSpeechService && _llmSpeechService != null)
             {
-                _languageService = new SpeechService(_settings, _logger);
-                _languageService.SendMediaBuffer += this.OnSendMediaBuffer;
+                _llmSpeechService.AudioResponse += this.OnLLMAudioResponse;
             }
         }
 
@@ -205,11 +210,11 @@ namespace EchoBot.Bot
             {
                 if (!startVideoPlayerCompleted.Task.IsCompleted) { return; }
 
-                if (_languageService != null)
+                if (_llmSpeechService != null)
                 {
-                    // send audio buffer to language service for processing
-                    // the particpant talking will hear the bot repeat what they said
-                    await _languageService.AppendAudioBuffer(e.Buffer);
+                    // send audio buffer to LLM speech service for processing
+                    // the participant will hear the LLM's response
+                    await _llmSpeechService.ProcessAudioAsync(_callId, e.Buffer);
                     e.Buffer.Dispose();
                 }
                 else
@@ -239,10 +244,38 @@ namespace EchoBot.Bot
             }
         }
 
-        private void OnSendMediaBuffer(object? sender, Media.MediaStreamEventArgs e)
+        /// <summary>
+        /// Event handler for LLM audio responses
+        /// </summary>
+        /// <param name="sender">The LLM Speech service</param>
+        /// <param name="e">The audio response event args</param>
+        private void OnLLMAudioResponse(object? sender, MediaStreamEventArgs e)
         {
-            this.audioMediaBuffers = e.AudioMediaBuffers;
-            var result = Task.Run(async () => await this.audioVideoFramePlayer.EnqueueBuffersAsync(this.audioMediaBuffers, new List<VideoMediaBuffer>())).GetAwaiter();
+            try
+            {
+                if (this.audioVideoFramePlayer != null && e.AudioMediaBuffers?.Count > 0)
+                {
+                    this.audioMediaBuffers = e.AudioMediaBuffers;
+                    var task = this.audioVideoFramePlayer.EnqueueBuffersAsync(this.audioMediaBuffers, new List<VideoMediaBuffer>());
+                    task.ContinueWith(t => 
+                    {
+                        if (t.IsCompletedSuccessfully)
+                        {
+                            _logger.LogInformation($"Enqueued {e.AudioMediaBuffers.Count} audio buffers from LLM response");
+                        }
+                        else if (t.Exception != null)
+                        {
+                            _logger.LogError(t.Exception, "Error enqueuing LLM audio buffers");
+                            this.GraphLogger.Error(t.Exception);
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing LLM audio response");
+                this.GraphLogger.Error(ex);
+            }
         }
     }
 }

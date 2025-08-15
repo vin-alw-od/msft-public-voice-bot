@@ -13,6 +13,7 @@
 // ***********************************************************************
 using EchoBot.Authentication;
 using EchoBot.Constants;
+using EchoBot.Media;
 using EchoBot.Models;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
@@ -61,6 +62,11 @@ namespace EchoBot.Bot
         private readonly IBotMediaLogger _mediaPlatformLogger;
 
         /// <summary>
+        /// The LLM Speech service for processing audio
+        /// </summary>
+        private readonly LLMSpeechService _llmSpeechService;
+
+        /// <summary>
         /// Gets the collection of call handlers.
         /// </summary>
         /// <value>The call handlers.</value>
@@ -93,12 +99,14 @@ namespace EchoBot.Bot
             IGraphLogger graphLogger,
             ILogger<BotService> logger,
             IOptions<AppSettings> settings,
-            IBotMediaLogger mediaLogger)
+            IBotMediaLogger mediaLogger,
+            LLMSpeechService llmSpeechService)
         {
             _graphLogger = graphLogger;
             _logger = logger;
             _settings = settings.Value;
             _mediaPlatformLogger = mediaLogger;
+            _llmSpeechService = llmSpeechService;
         }
 
         /// <summary>
@@ -318,7 +326,7 @@ namespace EchoBot.Bot
         {
             foreach (var call in args.AddedResources)
             {
-                var callHandler = new CallHandler(call, _settings, _logger);
+                var callHandler = new CallHandler(call, _settings, _logger, _llmSpeechService);
                 var threadId = call.Resource.ChatInfo.ThreadId;
                 this.CallHandlers[threadId] = callHandler;
             }

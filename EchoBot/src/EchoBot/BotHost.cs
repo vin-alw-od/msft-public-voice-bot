@@ -13,6 +13,8 @@
 // ***********************************************************************
 using DotNetEnv.Configuration;
 using EchoBot.Bot;
+using EchoBot.Services;
+using EchoBot.Media;
 using EchoBot.Util;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -80,6 +82,14 @@ namespace EchoBot
             builder.Logging.AddEventLog(config => config.SourceName = "Echo Bot Service");
 
             builder.Services.AddSingleton<IBotService, BotService>();
+
+            // Add HTTP client for LLM API
+            builder.Services.AddHttpClient<ILLMService, LLMService>();
+            
+            // Add LLM and Speech services
+            builder.Services.AddSingleton<ILLMService, LLMService>();
+            builder.Services.AddSingleton<ISpeechService, Services.SpeechService>();
+            builder.Services.AddSingleton<LLMSpeechService>();
 
             // Bot Settings Setup
             var botInternalHostingProtocol = "https";
