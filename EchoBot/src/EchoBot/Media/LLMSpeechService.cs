@@ -307,6 +307,7 @@ namespace EchoBot.Media
             var chunkSize = 640; // 20ms of PCM 16kHz audio
 
             _logger.LogInformation($"Creating audio buffers from {buffer.Length} bytes of audio data");
+            _logger.LogInformation($"Audio chunking: Will create {Math.Ceiling((double)buffer.Length / chunkSize)} buffers from {buffer.Length} bytes");
 
             // Split the large buffer into 640-byte chunks (20ms each)
             for (int offset = 0; offset < buffer.Length; offset += chunkSize)
