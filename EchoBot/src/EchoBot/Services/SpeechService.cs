@@ -27,6 +27,11 @@ namespace EchoBot.Services
             var speechRegion = configuration.GetValue<string>("AppSettings:SpeechConfigRegion");
             var botLanguage = configuration.GetValue<string>("AppSettings:BotLanguage") ?? "en-US";
             
+            _logger.LogInformation("Speech Service Configuration Debug:");
+            _logger.LogInformation("SpeechConfigKey: {Key}", string.IsNullOrEmpty(speechKey) ? "NULL/EMPTY" : "SET");
+            _logger.LogInformation("SpeechConfigRegion: {Region}", string.IsNullOrEmpty(speechRegion) ? "NULL/EMPTY" : speechRegion);
+            _logger.LogInformation("BotLanguage: {Language}", botLanguage);
+            
             if (string.IsNullOrEmpty(speechKey) || string.IsNullOrEmpty(speechRegion))
             {
                 _logger.LogWarning("Speech service not configured. SpeechConfigKey and SpeechConfigRegion are required.");
@@ -48,7 +53,7 @@ namespace EchoBot.Services
             
             _speechConfig.SpeechSynthesisVoiceName = _voiceName;
             
-            _logger.LogInformation("Speech service initialized with language: {Language}, voice: {Voice}", botLanguage, _voiceName);
+            _logger.LogInformation("✅ Speech service initialized successfully with language: {Language}, voice: {Voice}", botLanguage, _voiceName);
         }
 
         public async Task<string> SpeechToTextAsync(Stream audioStream)
@@ -122,6 +127,7 @@ namespace EchoBot.Services
         {
             if (_speechConfig == null)
             {
+                _logger.LogError("❌ Speech service is not configured - _speechConfig is null");
                 throw new InvalidOperationException("Speech service is not configured");
             }
 

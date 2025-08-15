@@ -208,7 +208,15 @@ namespace EchoBot.Media
             if (!string.IsNullOrEmpty(_currentCallId))
             {
                 _logger.LogInformation("Creating session and triggering initial greeting for call: {CallId}", _currentCallId);
-                await GetOrCreateSessionAsync(_currentCallId);
+                try
+                {
+                    await GetOrCreateSessionAsync(_currentCallId);
+                    _logger.LogInformation("StartAsync completed successfully for call: {CallId}", _currentCallId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in StartAsync for call: {CallId}", _currentCallId);
+                }
             }
             else
             {
