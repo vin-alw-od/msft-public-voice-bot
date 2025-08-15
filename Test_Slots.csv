@@ -1,0 +1,10 @@
+field_name,definition
+Initiative,What is the initiative that is being executed
+Type of AI,"AI, Generative AI, Agentic AI"
+Current Stage,"Stage of execution like Ideation, Development, UAT, Production"
+Budget,Monetary allocation for this initiative
+Business Objectives,What is the ultimate goal of this initiative
+Success Metrics,"What is the success criteria like improve automation, drive down SLA's etc"
+Department,"Which department is running this initiative like IT, HR, Finance etc"
+Tech Stack,High level Tech Stack details.
+Next Steps,What is the customer going to as next steps in the initiative

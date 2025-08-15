@@ -1,0 +1,24 @@
+# FastAPI and server dependencies
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+
+# Existing dependencies from your SurveyAgent - using compatible versions
+langchain-openai>=0.0.8
+langchain>=0.1.0
+langchain-core>=0.1.0
+pandas>=2.1.4
+openai>=1.6.1
+
+# Additional useful dependencies for production
+python-multipart==0.0.6  # For form data handling
+python-jose[cryptography]==3.3.0  # For JWT tokens if needed
+passlib[bcrypt]==1.7.4  # For password hashing if needed
+requests>=2.31.0  # For HTTP requests to fetch CSV files
+
+# For cloud storage (Azure)
+azure-storage-blob==12.19.0
+azure-identity==1.15.0
+
+# For logging and monitoring
+structlog==23.2.0

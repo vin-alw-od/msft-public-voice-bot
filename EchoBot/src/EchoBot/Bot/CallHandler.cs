@@ -28,6 +28,11 @@ namespace EchoBot.Bot
         public BotMediaStream BotMediaStream { get; private set; }
 
         /// <summary>
+        /// The LLM Speech service for processing audio
+        /// </summary>
+        private readonly LLMSpeechService _llmSpeechService;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="CallHandler" /> class.
         /// </summary>
         /// <param name="statefulCall">The stateful call.</param>
@@ -43,6 +48,7 @@ namespace EchoBot.Bot
             : base(TimeSpan.FromMinutes(10), statefulCall?.GraphLogger)
         {
             this.Call = statefulCall;
+            this._llmSpeechService = llmSpeechService;
             this.Call.OnUpdated += this.CallOnUpdated;
             this.Call.Participants.OnUpdated += this.ParticipantsOnUpdated;
 
@@ -76,7 +82,22 @@ namespace EchoBot.Bot
 
             if (e.OldResource.State != e.NewResource.State && e.NewResource.State == CallState.Established)
             {
-                // Call is established...
+                // Call is established - start LLM speech service with initial greeting
+                if (_llmSpeechService != null)
+                {
+                    _llmSpeechService.SetCurrentCallId(this.Call.Id);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _llmSpeechService.StartAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            GraphLogger.Error($"Failed to start LLM speech service: {ex.Message}");
+                        }
+                    });
+                }
             }
 
             if ((e.OldResource.State == CallState.Established) && (e.NewResource.State == CallState.Terminated))
@@ -84,6 +105,22 @@ namespace EchoBot.Bot
                 if (BotMediaStream != null)
                 {
                     await BotMediaStream.ShutdownAsync().ForgetAndLogExceptionAsync(GraphLogger);
+                }
+                
+                // Cleanup LLM speech service session
+                if (_llmSpeechService != null)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _llmSpeechService.StopAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            GraphLogger.Error($"Failed to stop LLM speech service: {ex.Message}");
+                        }
+                    });
                 }
             }
         }
