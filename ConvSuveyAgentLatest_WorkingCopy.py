@@ -394,13 +394,14 @@ class SurveyAgent:
             
             # Process each field
             for field, val in extracted.items():
-                # Only process fields that are explicitly mentioned in the user's message
-                if val is not None and val != "" and field.lower() in snippet.lower():
+                # Only process fields that have valid values extracted by the LLM
+                if val is not None and val != "":
                     print(f"\nDEBUG: Processing field: {field}")
                     print(f"DEBUG: Raw value: {val}")
                     
-                    # Skip fields that haven't been asked about yet
+                    # Only store if field is actually missing (prevents infinite loops)
                     if field not in self.get_missing_fields():
+                        print(f"DEBUG: Field {field} already collected, skipping")
                         continue
                     
                     # Special handling for "no new initiatives" response
@@ -418,6 +419,10 @@ class SurveyAgent:
         
         except Exception as e:
             print(f"DEBUG: Error in extraction: {str(e)}")
+            print(f"DEBUG: Error type: {type(e).__name__}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+            # Don't return - continue processing to avoid infinite loops
             return
 
     def extract_all_fields(self, snippet, current_field=None):
@@ -466,13 +471,28 @@ class SurveyAgent:
     def update_initiatives_csv(self, new_initiative):
         """Update AI_Initiatives.csv with new initiative or update existing one."""
         try:
-            filename = "/Users/aadhavarjun/workspace/github_code/msft-public-voice-botAI_Initiatives.csv"
+            # Use Azure Blob Storage URL for AI_Initiatives.csv like other CSV files
+            sas_token = os.getenv("AZURE_STORAGE_SAS_TOKEN", "")
+            base_url = "https://acu1tmagentbotd1saglobal.blob.core.windows.net/csvdata"
             
-            # Read existing initiatives
-            if os.path.exists(filename):
-                df = pd.read_csv(filename)
-                print(f"\nDEBUG: Read {len(df)} existing initiatives from CSV")
+            if sas_token:
+                initiatives_csv_url = f"{base_url}/AI_Initiatives.csv?{sas_token}"
             else:
+                initiatives_csv_url = os.getenv("INITIATIVES_CSV_URL", f"{base_url}/AI_Initiatives.csv")
+            
+            # Read existing initiatives from Azure Blob
+            try:
+                initiatives_response = requests.get(initiatives_csv_url, timeout=30)
+                if initiatives_response.status_code == 200:
+                    initiatives_csv = StringIO(initiatives_response.text)
+                    df = pd.read_csv(initiatives_csv)
+                    print(f"\nDEBUG: Read {len(df)} existing initiatives from Azure Blob CSV")
+                else:
+                    # File doesn't exist yet, create new DataFrame
+                    df = pd.DataFrame(columns=self.slots)
+                    print(f"\nDEBUG: No existing initiatives file found, creating new one")
+            except Exception as e:
+                print(f"\nDEBUG: Error reading from Azure Blob, creating new DataFrame: {e}")
                 df = pd.DataFrame(columns=self.slots)
             
             # Check if initiative already exists
@@ -494,12 +514,39 @@ class SurveyAgent:
                     new_row.update(new_initiative)
                     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             
-            # Save updated DataFrame
-            df.to_csv(filename, index=False)
-            print(f"\nDEBUG: Successfully updated {filename} with {len(df)} initiatives")
+            # Save updated DataFrame back to Azure Blob
+            csv_string = df.to_csv(index=False)
+            print(f"\nDEBUG: Generated CSV data with {len(df)} initiatives:")
+            print(f"DEBUG: CSV content preview: {csv_string[:200]}...")
+            
+            # Try to upload back to Azure Blob using PUT request
+            try:
+                if sas_token:
+                    upload_url = f"{base_url}/AI_Initiatives.csv?{sas_token}"
+                    headers = {
+                        'x-ms-blob-type': 'BlockBlob',
+                        'Content-Type': 'text/csv'
+                    }
+                    
+                    upload_response = requests.put(upload_url, data=csv_string, headers=headers, timeout=30)
+                    
+                    if upload_response.status_code in [200, 201]:
+                        print(f"\nDEBUG: Successfully uploaded AI_Initiatives.csv to Azure Blob")
+                    else:
+                        print(f"\nDEBUG: Failed to upload to Azure Blob. Status: {upload_response.status_code}")
+                        print(f"DEBUG: Response: {upload_response.text}")
+                else:
+                    print(f"\nDEBUG: No SAS token available - cannot upload to Azure Blob")
+            except Exception as upload_error:
+                print(f"\nDEBUG: Error uploading to Azure Blob: {upload_error}")
+                print(f"DEBUG: Data will be lost - consider implementing local backup")
+            
+            print(f"\nDEBUG: Successfully processed initiative data with {len(df)} records")
             
         except Exception as e:
             print(f"\nDEBUG: Error updating CSV file: {str(e)}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
 
     def run_survey(self):
         all_initiatives = []
@@ -682,15 +729,29 @@ class SurveyAgent:
             print("No initiatives were collected.")
 
     def load_previous_initiatives(self):
-        """Load previously collected initiatives from CSV file."""
+        """Load previously collected initiatives from Azure Blob CSV file."""
         try:
-            filename = "C:\\Misc\\Mphasis\\Mphasis.AI\\AI_Initiatives.csv"
-            if os.path.exists(filename):
-                df = pd.read_csv(filename)
+            # Use Azure Blob Storage URL for AI_Initiatives.csv like other CSV files
+            sas_token = os.getenv("AZURE_STORAGE_SAS_TOKEN", "")
+            base_url = "https://acu1tmagentbotd1saglobal.blob.core.windows.net/csvdata"
+            
+            if sas_token:
+                initiatives_csv_url = f"{base_url}/AI_Initiatives.csv?{sas_token}"
+            else:
+                initiatives_csv_url = os.getenv("INITIATIVES_CSV_URL", f"{base_url}/AI_Initiatives.csv")
+            
+            # Try to read from Azure Blob
+            initiatives_response = requests.get(initiatives_csv_url, timeout=30)
+            if initiatives_response.status_code == 200:
+                initiatives_csv = StringIO(initiatives_response.text)
+                df = pd.read_csv(initiatives_csv)
+                print(f"Loaded {len(df)} previous initiatives from Azure Blob")
                 return df.to_dict('records')  # Convert to list of dictionaries
-            return []
+            else:
+                print("No previous initiatives file found in Azure Blob")
+                return []
         except Exception as e:
-            print(f"Error loading previous initiatives: {str(e)}")
+            print(f"Error loading previous initiatives from Azure Blob: {str(e)}")
             return []
 
     def format_previous_initiatives_context(self, previous_initiatives):

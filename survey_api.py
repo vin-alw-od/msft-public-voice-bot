@@ -95,6 +95,14 @@ class SurveySession:
     def process_user_input(self, user_input: str):
         """Process user input and return agent response"""
         try:
+            # Add timeout protection to prevent infinite processing
+            import signal
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Processing timed out after 25 seconds")
+            
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(25)  # 25 second timeout
             # Check for exit conditions
             if user_input.lower() in ("no", "n", "bye", "exit", "quit"):
                 self.current_status = "completed"
@@ -172,14 +180,23 @@ class SurveySession:
             self.messages.append(HumanMessage(content=user_input))
             self.messages.append(AIMessage(content=assistant_msg))
             
-            return {
+            result = {
                 "message": answer,
                 "status": "collecting",
                 "collected_data": self.agent.collected_data,
                 "missing_fields": missing
             }
             
+            # Clear the timeout
+            signal.alarm(0)
+            return result
+            
+        except TimeoutError as e:
+            signal.alarm(0)  # Clear timeout
+            self.current_status = "error"
+            raise HTTPException(status_code=408, detail="Processing timed out - please try again")
         except Exception as e:
+            signal.alarm(0)  # Clear timeout
             self.current_status = "error"
             raise HTTPException(status_code=500, detail=f"Error processing user input: {str(e)}")
 

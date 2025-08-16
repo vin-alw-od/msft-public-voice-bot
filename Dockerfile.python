@@ -23,5 +23,14 @@ RUN mkdir -p /app/data
 # Expose port
 EXPOSE 8000
 
-# Start the application
-CMD ["uvicorn", "survey_api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Set memory and performance optimizations
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHON_MAX_MEMORY=512MB
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash app
+USER app
+
+# Start the application with resource limits
+CMD ["uvicorn", "survey_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "30", "--timeout-graceful-shutdown", "10"]
