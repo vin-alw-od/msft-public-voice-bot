@@ -76,17 +76,13 @@ namespace EchoBot.Media
                 using var audioStream = new MemoryStream(audioData);
                 var recognizedText = await _speechService.SpeechToTextAsync(audioStream);
                 
-                _logger.LogInformation("🎯 Speech recognition result: '{Text}' (Empty: {IsEmpty})", recognizedText ?? "NULL", string.IsNullOrEmpty(recognizedText));
+                // HARDCODE TEST: Always simulate "how are you" input to test pipeline
+                var hardcodedText = "how are you";
+                _logger.LogInformation("🔧 HARDCODE TEST: Overriding speech recognition with: '{Text}'", hardcodedText);
+                _logger.LogInformation("🎯 Original speech recognition result: '{Text}' (Empty: {IsEmpty})", recognizedText ?? "NULL", string.IsNullOrEmpty(recognizedText));
                 
-                if (!string.IsNullOrEmpty(recognizedText))
-                {
-                    _logger.LogInformation("✅ Processing recognized speech: {Text}", recognizedText);
-                    await ProcessRecognizedSpeechAsync(recognizedText);
-                }
-                else
-                {
-                    _logger.LogInformation("⏭️ Skipping empty speech recognition result");
-                }
+                _logger.LogInformation("✅ Processing hardcoded speech: {Text}", hardcodedText);
+                await ProcessRecognizedSpeechAsync(hardcodedText);
             }
             catch (Exception ex)
             {
