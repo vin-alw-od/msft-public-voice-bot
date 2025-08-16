@@ -18,6 +18,7 @@ namespace EchoBot.Media
         private readonly ILLMService _llmService;
         private readonly ISpeechService _speechService;
         private readonly ConcurrentDictionary<string, string> _callSessions = new ConcurrentDictionary<string, string>();
+        private readonly ConcurrentDictionary<string, bool> _greetingPlayed = new ConcurrentDictionary<string, bool>();
         private readonly ILogger _logger;
         private string _currentCallId;
 
@@ -38,21 +39,8 @@ namespace EchoBot.Media
             _currentCallId = callId;
             _logger.LogInformation("LLM Speech Service initialized for call: {CallId}", callId);
             
-            // Trigger initial greeting immediately after call ID is set
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(3000); // Wait 3 seconds for call to be ready
-                    _logger.LogError("🔥 Triggering initial greeting for call: {CallId}", callId);
-                    await GetOrCreateSessionAsync(callId);
-                    _logger.LogError("🔥 Initial greeting completed for call: {CallId}", callId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "🔥 Failed to trigger initial greeting for call: {CallId}", callId);
-                }
-            });
+            // Don't trigger greeting here - let StartAsync handle it to avoid duplicates
+            _logger.LogInformation("Call ID set, waiting for StartAsync to trigger greeting");
         }
 
         /// <summary>
@@ -212,8 +200,8 @@ namespace EchoBot.Media
             {
                 _logger.LogInformation("Processing recognized speech through LLM: {Text}", recognizedText);
 
-                // Get or create session for this call
-                var sessionId = await GetOrCreateSessionAsync(_currentCallId);
+                // Get or create session for this call (don't play greeting here)
+                var sessionId = await GetOrCreateSessionAsync(_currentCallId, playGreeting: false);
 
                 if (string.IsNullOrEmpty(sessionId))
                 {
@@ -256,9 +244,9 @@ namespace EchoBot.Media
         /// <summary>
         /// Get or create LLM session for the current call
         /// </summary>
-        private async Task<string> GetOrCreateSessionAsync(string callId)
+        private async Task<string> GetOrCreateSessionAsync(string callId, bool playGreeting = false)
         {
-            _logger.LogInformation("GetOrCreateSessionAsync called for call ID: {CallId}", callId ?? "NULL");
+            _logger.LogInformation("GetOrCreateSessionAsync called for call ID: {CallId}, playGreeting: {PlayGreeting}", callId ?? "NULL", playGreeting);
             
             if (string.IsNullOrEmpty(callId))
             {
@@ -291,9 +279,16 @@ namespace EchoBot.Media
 
                     _callSessions.TryAdd(callId, sessionId);
 
-                    // Speak the initial greeting
-                    _logger.LogInformation("About to synthesize initial greeting for call: {CallId}", callId);
-                    await SynthesizeTextAsync(initialMessage);
+                    // Only play greeting if explicitly requested and not already played
+                    if (playGreeting && _greetingPlayed.TryAdd(callId, true))
+                    {
+                        _logger.LogInformation("Playing initial greeting for call: {CallId}", callId);
+                        await SynthesizeTextAsync(initialMessage);
+                    }
+                    else if (playGreeting)
+                    {
+                        _logger.LogInformation("Greeting already played for call: {CallId}, skipping", callId);
+                    }
 
                     _logger.LogInformation("Successfully created LLM session {SessionId} for call {CallId}", sessionId, callId);
                     return sessionId;
@@ -331,6 +326,9 @@ namespace EchoBot.Media
                     _logger.LogError(ex, "Error cleaning up session {SessionId}", sessionId);
                 }
             }
+
+            // Also cleanup greeting tracking
+            _greetingPlayed.TryRemove(callId, out _);
         }
 
         /// <summary>
@@ -338,25 +336,26 @@ namespace EchoBot.Media
         /// </summary>
         public async Task StartAsync()
         {
-            _logger.LogError("🔥 CRITICAL DEBUG: StartAsync called for call ID: {CallId}", _currentCallId ?? "NULL");
+            _logger.LogInformation("StartAsync called for call ID: {CallId}", _currentCallId ?? "NULL");
             
             // Start with an initial greeting when the call begins
             if (!string.IsNullOrEmpty(_currentCallId))
             {
-                _logger.LogError("🔥 CRITICAL DEBUG: Creating session and triggering initial greeting for call: {CallId}", _currentCallId);
+                _logger.LogInformation("Creating session and triggering initial greeting for call: {CallId}", _currentCallId);
                 try
                 {
-                    await GetOrCreateSessionAsync(_currentCallId);
-                    _logger.LogError("🔥 CRITICAL DEBUG: StartAsync completed successfully for call: {CallId}", _currentCallId);
+                    // This is the ONLY place where we should play the greeting
+                    await GetOrCreateSessionAsync(_currentCallId, playGreeting: true);
+                    _logger.LogInformation("StartAsync completed successfully for call: {CallId}", _currentCallId);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "🔥 CRITICAL DEBUG: Error in StartAsync for call: {CallId}", _currentCallId);
+                    _logger.LogError(ex, "Error in StartAsync for call: {CallId}", _currentCallId);
                 }
             }
             else
             {
-                _logger.LogError("🔥 CRITICAL DEBUG: Cannot start LLM speech service - current call ID is null or empty");
+                _logger.LogError("Cannot start LLM speech service - current call ID is null or empty");
             }
         }
 
