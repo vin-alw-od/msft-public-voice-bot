@@ -23,7 +23,13 @@ namespace EchoBot.Services
         {
             _httpClient = httpClient;
             _logger = logger;
-            _apiBaseUrl = configuration.GetValue<string>("LLMApi:BaseUrl") ?? "http://localhost:8000";
+            
+            // Try to get from Azure Key Vault first, then fallback to appsettings
+            _apiBaseUrl = configuration.GetValue<string>("LLMApiBaseUrl") ?? 
+                         configuration.GetValue<string>("LLMApi:BaseUrl") ?? 
+                         "http://localhost:8000";
+            
+            _logger.LogInformation("LLM API Base URL configured as: {ApiBaseUrl}", _apiBaseUrl);
             
             // Set default timeout for LLM API calls
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
