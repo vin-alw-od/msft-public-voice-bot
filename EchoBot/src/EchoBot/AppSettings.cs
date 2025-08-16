@@ -104,6 +104,11 @@ namespace EchoBot
         /// </summary>
         [Required]
         public string MediaDnsName { get; set; }
+
+        /// <summary>
+        /// Gets or sets the LLM API base URL from Key Vault
+        /// </summary>
+        public string? LLMApiBaseUrl { get; set; }
     }
 }
 
