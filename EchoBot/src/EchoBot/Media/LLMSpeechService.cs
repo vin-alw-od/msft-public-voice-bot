@@ -59,40 +59,106 @@ namespace EchoBot.Media
         /// Process audio buffer from Teams call
         /// </summary>
         private DateTime _lastProcessingTime = DateTime.MinValue;
-        private readonly TimeSpan _processingCooldown = TimeSpan.FromSeconds(5);
+        private readonly TimeSpan _processingCooldown = TimeSpan.FromSeconds(1);
+        
+        // Audio buffering for speech recognition
+        private readonly List<byte> _audioBuffer = new List<byte>();
+        private DateTime _lastVoiceActivity = DateTime.MinValue;
+        private readonly TimeSpan _silenceTimeout = TimeSpan.FromMilliseconds(800); // 0.8s of silence = end of speech
+        private bool _isBuffering = false;
 
         public async Task ProcessAudioAsync(string callId, AudioMediaBuffer audioBuffer)
         {
             try
             {
-                _logger.LogInformation("🎤 Processing audio buffer for call {CallId}, Length: {Length} bytes", callId, audioBuffer.Length);
-                
-                // Cooldown check to prevent rapid-fire processing
-                if (DateTime.Now - _lastProcessingTime < _processingCooldown)
-                {
-                    _logger.LogInformation("⏰ Skipping audio processing - within cooldown period ({Seconds}s remaining)", 
-                        (_processingCooldown - (DateTime.Now - _lastProcessingTime)).TotalSeconds);
-                    return;
-                }
-                
                 // Set the current call context
                 SetCurrentCallId(callId);
                 
-                // Convert audio buffer to stream and process via speech service interface
+                // Convert audio buffer to byte array
                 var audioData = new byte[audioBuffer.Length];
                 Marshal.Copy(audioBuffer.Data, audioData, 0, (int)audioBuffer.Length);
                 
-                // Simple Voice Activity Detection - check audio energy
-                if (!HasVoiceActivity(audioData))
+                // Check for voice activity
+                bool hasVoice = HasVoiceActivity(audioData);
+                
+                if (hasVoice)
                 {
-                    _logger.LogInformation("🔇 No voice activity detected - skipping processing");
+                    // Voice detected - start/continue buffering
+                    _lastVoiceActivity = DateTime.Now;
+                    
+                    if (!_isBuffering)
+                    {
+                        _logger.LogInformation("🎤 Started buffering speech for call {CallId}", callId);
+                        _isBuffering = true;
+                        _audioBuffer.Clear();
+                    }
+                    
+                    // Add audio data to buffer with size limit
+                    _audioBuffer.AddRange(audioData);
+                    
+                    // Prevent buffer from growing too large (max ~10 seconds)
+                    if (_audioBuffer.Count > 320000) // 10 seconds at 16kHz 16-bit
+                    {
+                        _logger.LogWarning("🚨 Audio buffer too large ({Bytes} bytes), forcing processing", _audioBuffer.Count);
+                        await ProcessBufferedAudioAsync();
+                        _isBuffering = false;
+                        _audioBuffer.Clear();
+                        _lastProcessingTime = DateTime.Now;
+                        return;
+                    }
+                    
+                    _logger.LogInformation("🔊 Buffering audio - Total: {TotalBytes} bytes", _audioBuffer.Count);
+                }
+                else if (_isBuffering)
+                {
+                    // No voice, but we were buffering - check if silence timeout reached
+                    var silenceDuration = DateTime.Now - _lastVoiceActivity;
+                    
+                    if (silenceDuration >= _silenceTimeout)
+                    {
+                        // End of speech detected - process the buffered audio
+                        _logger.LogInformation("⏹️ End of speech detected after {SilenceMs}ms silence. Processing {BufferSize} bytes of audio", 
+                            silenceDuration.TotalMilliseconds, _audioBuffer.Count);
+                        
+                        // Cooldown check
+                        if (DateTime.Now - _lastProcessingTime < _processingCooldown)
+                        {
+                            _logger.LogInformation("⏰ Skipping processing - within cooldown period");
+                        }
+                        else
+                        {
+                            await ProcessBufferedAudioAsync();
+                            _lastProcessingTime = DateTime.Now;
+                        }
+                        
+                        // Reset buffering state
+                        _isBuffering = false;
+                        _audioBuffer.Clear();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error processing audio for call {CallId}", callId);
+                // Reset state on error
+                _isBuffering = false;
+                _audioBuffer.Clear();
+            }
+        }
+
+        private async Task ProcessBufferedAudioAsync()
+        {
+            try
+            {
+                if (_audioBuffer.Count == 0)
+                {
+                    _logger.LogWarning("No audio data to process");
                     return;
                 }
+
+                _logger.LogInformation("🎯 Processing {AudioSize} bytes of buffered audio", _audioBuffer.Count);
                 
-                _logger.LogInformation("🔊 Voice activity detected, sending to speech recognition...");
-                _lastProcessingTime = DateTime.Now;
-                
-                using var audioStream = new MemoryStream(audioData);
+                using var audioStream = new MemoryStream(_audioBuffer.ToArray());
                 var recognizedText = await _speechService.SpeechToTextAsync(audioStream);
                 
                 _logger.LogInformation("🎯 Speech recognition result: '{Text}' (Empty: {IsEmpty})", recognizedText ?? "NULL", string.IsNullOrEmpty(recognizedText));
@@ -104,12 +170,12 @@ namespace EchoBot.Media
                 }
                 else
                 {
-                    _logger.LogInformation("⏭️ Skipping empty speech recognition result");
+                    _logger.LogInformation("⏭️ No speech recognized from buffered audio");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error processing audio for call {CallId}", callId);
+                _logger.LogError(ex, "❌ Error processing buffered audio");
             }
         }
 
@@ -118,7 +184,7 @@ namespace EchoBot.Media
         /// </summary>
         private bool HasVoiceActivity(byte[] audioData)
         {
-            const double SPEECH_THRESHOLD = 10.0; // Adjust this value as needed
+            const double SPEECH_THRESHOLD = 50.0; // Increased to reduce false positives
             
             // Calculate RMS (Root Mean Square) energy
             double sum = 0;
