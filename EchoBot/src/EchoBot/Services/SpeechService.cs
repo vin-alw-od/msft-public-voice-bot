@@ -54,6 +54,14 @@ namespace EchoBot.Services
             _speechConfig = SpeechConfig.FromSubscription(speechKey, speechRegion);
             _speechConfig.SpeechRecognitionLanguage = botLanguage;
             
+            // Configure Azure VAD (Voice Activity Detection)
+            _speechConfig.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "2000"); // 2 seconds of silence before stopping
+            _speechConfig.SetProperty(PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, "5000"); // 5 seconds initial silence
+            _speechConfig.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "2000"); // 2 seconds end silence
+            _speechConfig.SetProperty(PropertyId.Speech_SegmentationMaximumSilenceTimeoutMs, "10000"); // Max 10 seconds silence
+            
+            _logger.LogInformation("🔊 Azure VAD configured: InitialSilence=5s, EndSilence=2s, MaxSilence=10s");
+            
             // Set appropriate voice based on language
             _voiceName = botLanguage switch
             {

@@ -58,11 +58,22 @@ namespace EchoBot.Media
         /// <summary>
         /// Process audio buffer from Teams call
         /// </summary>
+        private DateTime _lastProcessingTime = DateTime.MinValue;
+        private readonly TimeSpan _processingCooldown = TimeSpan.FromSeconds(5);
+
         public async Task ProcessAudioAsync(string callId, AudioMediaBuffer audioBuffer)
         {
             try
             {
                 _logger.LogInformation("🎤 Processing audio buffer for call {CallId}, Length: {Length} bytes", callId, audioBuffer.Length);
+                
+                // Cooldown check to prevent rapid-fire processing
+                if (DateTime.Now - _lastProcessingTime < _processingCooldown)
+                {
+                    _logger.LogInformation("⏰ Skipping audio processing - within cooldown period ({Seconds}s remaining)", 
+                        (_processingCooldown - (DateTime.Now - _lastProcessingTime)).TotalSeconds);
+                    return;
+                }
                 
                 // Set the current call context
                 SetCurrentCallId(callId);
@@ -71,23 +82,59 @@ namespace EchoBot.Media
                 var audioData = new byte[audioBuffer.Length];
                 Marshal.Copy(audioBuffer.Data, audioData, 0, (int)audioBuffer.Length);
                 
-                _logger.LogInformation("🔊 Converted audio buffer to byte array, sending to speech recognition...");
+                // Simple Voice Activity Detection - check audio energy
+                if (!HasVoiceActivity(audioData))
+                {
+                    _logger.LogInformation("🔇 No voice activity detected - skipping processing");
+                    return;
+                }
+                
+                _logger.LogInformation("🔊 Voice activity detected, sending to speech recognition...");
+                _lastProcessingTime = DateTime.Now;
                 
                 using var audioStream = new MemoryStream(audioData);
                 var recognizedText = await _speechService.SpeechToTextAsync(audioStream);
                 
-                // HARDCODE TEST: Always simulate "how are you" input to test pipeline
-                var hardcodedText = "how are you";
-                _logger.LogInformation("🔧 HARDCODE TEST: Overriding speech recognition with: '{Text}'", hardcodedText);
-                _logger.LogInformation("🎯 Original speech recognition result: '{Text}' (Empty: {IsEmpty})", recognizedText ?? "NULL", string.IsNullOrEmpty(recognizedText));
+                _logger.LogInformation("🎯 Speech recognition result: '{Text}' (Empty: {IsEmpty})", recognizedText ?? "NULL", string.IsNullOrEmpty(recognizedText));
                 
-                _logger.LogInformation("✅ Processing hardcoded speech: {Text}", hardcodedText);
-                await ProcessRecognizedSpeechAsync(hardcodedText);
+                if (!string.IsNullOrEmpty(recognizedText))
+                {
+                    _logger.LogInformation("✅ Processing recognized speech: {Text}", recognizedText);
+                    await ProcessRecognizedSpeechAsync(recognizedText);
+                }
+                else
+                {
+                    _logger.LogInformation("⏭️ Skipping empty speech recognition result");
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ Error processing audio for call {CallId}", callId);
             }
+        }
+
+        /// <summary>
+        /// Simple Voice Activity Detection based on audio energy
+        /// </summary>
+        private bool HasVoiceActivity(byte[] audioData)
+        {
+            const double SPEECH_THRESHOLD = 10.0; // Adjust this value as needed
+            
+            // Calculate RMS (Root Mean Square) energy
+            double sum = 0;
+            for (int i = 0; i < audioData.Length; i += 2) // 16-bit samples
+            {
+                if (i + 1 < audioData.Length)
+                {
+                    short sample = (short)(audioData[i] | (audioData[i + 1] << 8));
+                    sum += sample * sample;
+                }
+            }
+            
+            var rms = Math.Sqrt(sum / (audioData.Length / 2));
+            _logger.LogInformation("🔊 Audio RMS energy: {Energy:F2} (threshold: {Threshold})", rms, SPEECH_THRESHOLD);
+            
+            return rms > SPEECH_THRESHOLD;
         }
 
         /// <summary>
