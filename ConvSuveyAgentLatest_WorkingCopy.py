@@ -209,14 +209,16 @@ class SurveyAgent:
 
         # Extraction prompt for pulling all mentioned fields into JSON
         self.extraction_template = """
-            Extract information about the following fields from this conversation snippet. 
+            Extract information about the following fields from the USER'S RESPONSE ONLY. 
+            DO NOT extract information from the assistant's question.
             Return a JSON object with the following rules:
             1. Use EXACT field names as keys
-            2. For each field, extract the most recent/relevant information
-            3. If a field is not mentioned, return null for that field
+            2. For each field, extract information ONLY from the user's response
+            3. If a field is not mentioned by the USER, return null for that field
             4. For fields that can have multiple values, return them as a JSON array
-            5. Preserve the exact values mentioned in the conversation
-            6. DO NOT include default values - only extract values explicitly mentioned
+            5. Preserve the exact values mentioned by the USER
+            6. DO NOT include default values - only extract values explicitly mentioned by the USER
+            7. IGNORE any field names that appear in the assistant's question
 
             Fields with definitions:
             {fields_with_definitions}

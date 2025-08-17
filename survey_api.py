@@ -174,7 +174,17 @@ class SurveySession:
                 else:
                     answer = thought5_section
             else:
-                answer = assistant_msg
+                # Find the last question in the response
+                if "?" in assistant_msg:
+                    lines = assistant_msg.split('\n')
+                    for line in reversed(lines):
+                        if "?" in line and line.strip():
+                            answer = line.strip()
+                            break
+                    else:
+                        answer = assistant_msg
+                else:
+                    answer = assistant_msg
             
             # Update message history
             self.messages.append(HumanMessage(content=user_input))

@@ -13,6 +13,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
+COPY survey_api_fixed.py .
+COPY ConvSurveyAgent_Fixed.py .
+# Keep original files for compatibility if needed
 COPY survey_api.py .
 COPY ConvSuveyAgentLatest_WorkingCopy.py .
 COPY *.csv ./
@@ -32,5 +35,5 @@ ENV PYTHON_MAX_MEMORY=512MB
 RUN useradd --create-home --shell /bin/bash app
 USER app
 
-# Start the application with resource limits
-CMD ["uvicorn", "survey_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "30", "--timeout-graceful-shutdown", "10"]
+# Start the application with resource limits and updated timeouts
+CMD ["uvicorn", "survey_api_fixed:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "120", "--timeout-graceful-shutdown", "30"]
