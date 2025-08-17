@@ -11,8 +11,8 @@ from io import StringIO
 
 class SurveyAgent:
     def __init__(self):
-        # Initialize LLM
-        self.llm = ChatOpenAI(temperature=0)
+        # Initialize LLM with GPT-4 mini for higher rate limits
+        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
         
         # Azure Blob Storage URLs with optional SAS token support
         sas_token = os.getenv("AZURE_STORAGE_SAS_TOKEN", "")
