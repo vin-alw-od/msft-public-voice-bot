@@ -36,8 +36,8 @@ namespace EchoBot.Services
             _logger.LogDebug("LLM API Base URL configured as: {ApiBaseUrl}", _apiBaseUrl);
             _logger.LogDebug("Key Vault LLMApiBaseUrl: {KeyVaultUrl}", appSettings.LLMApiBaseUrl);
             
-            // Set default timeout for LLM API calls
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            // Set default timeout for LLM API calls (increased for complex LLM processing)
+            _httpClient.Timeout = TimeSpan.FromSeconds(90);
         }
 
         public async Task<string> StartSurveyAsync(string userId = null)
