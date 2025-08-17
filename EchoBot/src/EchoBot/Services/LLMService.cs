@@ -33,8 +33,8 @@ namespace EchoBot.Services
                          configuration.GetValue<string>("LLMApi:BaseUrl") ?? 
                          "http://localhost:8000";
             
-            _logger.LogInformation("LLM API Base URL configured as: {ApiBaseUrl}", _apiBaseUrl);
-            _logger.LogInformation("Key Vault LLMApiBaseUrl: {KeyVaultUrl}", appSettings.LLMApiBaseUrl);
+            _logger.LogDebug("LLM API Base URL configured as: {ApiBaseUrl}", _apiBaseUrl);
+            _logger.LogDebug("Key Vault LLMApiBaseUrl: {KeyVaultUrl}", appSettings.LLMApiBaseUrl);
             
             // Set default timeout for LLM API calls
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
@@ -44,7 +44,7 @@ namespace EchoBot.Services
         {
             try
             {
-                _logger.LogInformation("Starting new survey session for user: {UserId}", userId ?? "anonymous");
+                _logger.LogDebug("Starting new survey session for user: {UserId}", userId ?? "anonymous");
 
                 var requestBody = new
                 {
@@ -81,7 +81,7 @@ namespace EchoBot.Services
         {
             try
             {
-                _logger.LogInformation("Processing user input for session: {SessionId}", sessionId);
+                _logger.LogDebug("Processing user input for session: {SessionId}", sessionId);
 
                 var requestBody = new
                 {
@@ -149,7 +149,7 @@ namespace EchoBot.Services
         {
             try
             {
-                _logger.LogInformation("Ending session: {SessionId}", sessionId);
+                _logger.LogDebug("Ending session: {SessionId}", sessionId);
                 
                 var response = await _httpClient.DeleteAsync($"{_apiBaseUrl}/session/{sessionId}");
                 response.EnsureSuccessStatusCode();

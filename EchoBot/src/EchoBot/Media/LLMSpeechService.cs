@@ -37,10 +37,10 @@ namespace EchoBot.Media
         public void SetCurrentCallId(string callId)
         {
             _currentCallId = callId;
-            _logger.LogInformation("LLM Speech Service initialized for call: {CallId}", callId);
+            _logger.LogDebug("LLM Speech Service initialized for call: {CallId}", callId);
             
             // Don't trigger greeting here - let StartAsync handle it to avoid duplicates
-            _logger.LogInformation("Call ID set, waiting for StartAsync to trigger greeting");
+            _logger.LogDebug("Call ID set, waiting for StartAsync to trigger greeting");
         }
 
         /// <summary>
@@ -95,7 +95,7 @@ namespace EchoBot.Media
                         return;
                     }
                     
-                    _logger.LogInformation("🔊 Buffering audio - Total: {TotalBytes} bytes", _audioBuffer.Count);
+                    _logger.LogTrace("🔊 Buffering audio - Total: {TotalBytes} bytes", _audioBuffer.Count);
                 }
                 else if (_isBuffering)
                 {
@@ -144,7 +144,7 @@ namespace EchoBot.Media
                     return;
                 }
 
-                _logger.LogInformation("🎯 Processing {AudioSize} bytes of buffered audio", _audioBuffer.Count);
+                _logger.LogDebug("🎯 Processing {AudioSize} bytes of buffered audio", _audioBuffer.Count);
                 
                 using var audioStream = new MemoryStream(_audioBuffer.ToArray());
                 var recognizedText = await _speechService.SpeechToTextAsync(audioStream);
@@ -186,7 +186,7 @@ namespace EchoBot.Media
             }
             
             var rms = Math.Sqrt(sum / (audioData.Length / 2));
-            _logger.LogInformation("🔊 Audio RMS energy: {Energy:F2} (threshold: {Threshold})", rms, SPEECH_THRESHOLD);
+            _logger.LogTrace("🔊 Audio RMS energy: {Energy:F2} (threshold: {Threshold})", rms, SPEECH_THRESHOLD);
             
             return rms > SPEECH_THRESHOLD;
         }
@@ -246,7 +246,7 @@ namespace EchoBot.Media
         /// </summary>
         private async Task<string> GetOrCreateSessionAsync(string callId, bool playGreeting = false)
         {
-            _logger.LogInformation("GetOrCreateSessionAsync called for call ID: {CallId}, playGreeting: {PlayGreeting}", callId ?? "NULL", playGreeting);
+            _logger.LogDebug("GetOrCreateSessionAsync called for call ID: {CallId}, playGreeting: {PlayGreeting}", callId ?? "NULL", playGreeting);
             
             if (string.IsNullOrEmpty(callId))
             {
@@ -266,7 +266,7 @@ namespace EchoBot.Media
                 // Start new survey session
                 var response = await _llmService.StartSurveyAsync($"teams_call_{callId}");
                 
-                _logger.LogInformation("LLM service response: {Response}", response);
+                _logger.LogDebug("LLM service response: {Response}", response);
                 
                 // Extract session ID from response (format: "SESSION_ID:xxx|message")
                 if (response.StartsWith("SESSION_ID:"))

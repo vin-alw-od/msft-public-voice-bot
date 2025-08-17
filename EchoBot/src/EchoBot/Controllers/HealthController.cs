@@ -37,7 +37,7 @@ namespace EchoBot.Controllers
         {
             try
             {
-                _logger.LogInformation("HEALTH CALL");
+                _logger.LogDebug("HEALTH CALL");
                 return Ok();
             }
             catch (Exception e)
