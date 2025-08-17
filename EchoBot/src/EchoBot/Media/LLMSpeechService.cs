@@ -54,6 +54,7 @@ namespace EchoBot.Media
         private DateTime _lastVoiceActivity = DateTime.MinValue;
         private readonly TimeSpan _silenceTimeout = TimeSpan.FromMilliseconds(800); // 0.8s of silence = end of speech
         private bool _isBuffering = false;
+        private readonly SemaphoreSlim _processingLock = new SemaphoreSlim(1, 1);
 
         public async Task ProcessAudioAsync(string callId, AudioMediaBuffer audioBuffer)
         {
@@ -136,6 +137,13 @@ namespace EchoBot.Media
 
         private async Task ProcessBufferedAudioAsync()
         {
+            // Prevent concurrent processing
+            if (!await _processingLock.WaitAsync(100)) // Non-blocking wait
+            {
+                _logger.LogInformation("⏸️ Audio processing already in progress, skipping");
+                return;
+            }
+
             try
             {
                 if (_audioBuffer.Count == 0)
@@ -146,7 +154,12 @@ namespace EchoBot.Media
 
                 _logger.LogDebug("🎯 Processing {AudioSize} bytes of buffered audio", _audioBuffer.Count);
                 
-                using var audioStream = new MemoryStream(_audioBuffer.ToArray());
+                // Copy buffer and clear immediately to prevent reprocessing
+                var audioToProcess = _audioBuffer.ToArray();
+                _audioBuffer.Clear();
+                _isBuffering = false;
+                
+                using var audioStream = new MemoryStream(audioToProcess);
                 var recognizedText = await _speechService.SpeechToTextAsync(audioStream);
                 
                 _logger.LogInformation("🎯 Speech recognition result: '{Text}' (Empty: {IsEmpty})", recognizedText ?? "NULL", string.IsNullOrEmpty(recognizedText));
@@ -164,6 +177,10 @@ namespace EchoBot.Media
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ Error processing buffered audio");
+            }
+            finally
+            {
+                _processingLock.Release();
             }
         }
 
@@ -475,6 +492,9 @@ namespace EchoBot.Media
                 }
             }
             _callSessions.Clear();
+            
+            // Dispose semaphore
+            _processingLock?.Dispose();
         }
     }
 }
