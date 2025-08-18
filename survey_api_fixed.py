@@ -33,7 +33,7 @@ class ProcessInputRequest(BaseModel):
 class ProcessInputResponse(BaseModel):
     session_id: str
     message: str
-    status: str  # "collecting", "completed", "error"
+    status: str  # "collecting", "follow_up", "completed", "error"
     collected_data: Optional[Dict[str, Any]] = None
     missing_fields: Optional[List[str]] = None
 
@@ -153,6 +153,9 @@ async def process_input(request: ProcessInputRequest):
         
         if session.status == "error":
             raise HTTPException(status_code=400, detail="Session is in error state")
+        
+        # Allow continued conversation in follow_up mode
+        # session.status can be "active" or "follow_up" - both allow processing
         
         # Process the input with timeout protection
         try:

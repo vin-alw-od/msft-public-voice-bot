@@ -10,7 +10,9 @@ import requests
 from io import StringIO
 from typing import Dict, List, Any, Optional
 import asyncio
+import threading
 from datetime import datetime, timedelta
+from conversation_logger import log_bot_question, log_user_answer, log_conversation_event, save_conversation
 
 
 class SurveyAgent:
@@ -19,9 +21,9 @@ class SurveyAgent:
     def __init__(self):
         # Initialize LLM with better settings
         self.llm = ChatOpenAI(
-            temperature=0.1,  # Slight creativity for natural conversation
+            temperature=0.3,  # Increased for faster inference
             model="gpt-4o-mini",  # Use GPT-4 mini for higher rate limits
-            max_tokens=1000,
+            max_tokens=150,  # Reduced from 1000 - bot responses are typically 20-80 tokens
             timeout=90  # Match LLMService.cs timeout
         )
         
@@ -36,6 +38,10 @@ class SurveyAgent:
         self.previous_initiatives = self._load_previous_initiatives()
         self.conversation_history = []
         self.max_conversation_length = 50  # Prevent memory explosion
+        self.in_follow_up_mode = False  # Track if we're in follow-up conversation mode
+        self.additional_initiatives = []  # Track additional initiatives mentioned in follow-up
+        self.collecting_additional = False  # Track if we're collecting data for additional initiative
+        self.current_additional_data = {}  # Data for current additional initiative being collected
         
     def _load_configuration(self):
         """Load Azure storage configuration."""
@@ -205,17 +211,27 @@ Keep it concise and engaging - just 2-3 sentences."""),
         try:
             # Handle exit conditions
             if self._is_exit_command(user_input):
-                return self._create_completion_response()
+                if self.in_follow_up_mode:
+                    # In follow-up mode, exit commands should actually complete the session
+                    return self._create_final_completion_response()
+                else:
+                    return self._create_completion_response()
             
             # Add user message to history
             self._add_to_history(HumanMessage(content=user_input))
             
-            # Extract information from user input
+            # If we're in follow-up mode, handle general conversation
+            if self.in_follow_up_mode:
+                return self._handle_follow_up_conversation(user_input)
+            
+            # Extract information from user input (only when collecting initial data)
             self._extract_fields_from_input(user_input)
             
             # Check if all fields are collected
             missing_fields = self.get_missing_fields()
             if not missing_fields:
+                # Transition to follow-up mode instead of completing
+                self.in_follow_up_mode = True
                 return self._create_completion_response()
             
             # Generate next question
@@ -235,7 +251,7 @@ Keep it concise and engaging - just 2-3 sentences."""),
             print(f"Error processing input: {e}")
             return {
                 "message": "I apologize, could you please repeat that?",
-                "status": "collecting",
+                "status": "collecting" if not self.in_follow_up_mode else "follow_up",
                 "collected_data": self.collected_data.copy(),
                 "missing_fields": self.get_missing_fields()
             }
@@ -415,13 +431,279 @@ Keep it concise and engaging - just 2-3 sentences."""),
             self.conversation_history = self.conversation_history[-self.max_conversation_length:]
     
     def _create_completion_response(self) -> Dict[str, Any]:
-        """Create response for completed conversation."""
+        """Create response for completed conversation with follow-up question."""
+        follow_up_message = "Thank you! I've gathered all the information about your AI initiative. This will be very helpful for our analysis. Is there anything else about your AI projects or initiatives you'd like to discuss or share?"
         return {
-            "message": "Thank you! I've gathered all the information about your AI initiative. This will be very helpful for our analysis.",
+            "message": follow_up_message,
+            "status": "follow_up",  # Changed from "completed" to allow continued conversation
+            "collected_data": self.collected_data.copy(),
+            "missing_fields": []
+        }
+    
+    def _create_final_completion_response(self) -> Dict[str, Any]:
+        """Create final completion response when user wants to end follow-up conversation."""
+        return {
+            "message": "Thank you for sharing your insights about AI initiatives. Have a great day!",
             "status": "completed",
             "collected_data": self.collected_data.copy(),
             "missing_fields": []
         }
+    
+    def _handle_follow_up_conversation(self, user_input: str) -> Dict[str, Any]:
+        """Handle general conversation after all required fields are collected."""
+        try:
+            # If we're in the middle of collecting additional initiative data
+            if self.collecting_additional:
+                return self._handle_additional_initiative_collection(user_input)
+            
+            # Check if user mentioned a new initiative
+            new_initiative = self._detect_new_initiative(user_input)
+            if new_initiative:
+                return self._offer_to_collect_additional_initiative(new_initiative, user_input)
+            
+            # Generate a conversational response
+            follow_up_response = self._generate_follow_up_response(user_input)
+            
+            # Add assistant response to history
+            self._add_to_history(AIMessage(content=follow_up_response))
+            
+            return {
+                "message": follow_up_response,
+                "status": "follow_up",
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
+            
+        except Exception as e:
+            print(f"Error in follow-up conversation: {e}")
+            return {
+                "message": "That's interesting! Is there anything else you'd like to share about your AI initiatives?",
+                "status": "follow_up",
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
+    
+    def _generate_follow_up_response(self, user_input: str) -> str:
+        """Generate conversational response for follow-up discussions."""
+        try:
+            # Create a prompt for follow-up conversation
+            follow_up_prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are a professional AI consultant having a follow-up conversation after collecting 
+all required information about an AI initiative. Be conversational, encouraging, and show interest in their work.
+
+You can:
+- Ask follow-up questions about their AI projects
+- Provide encouragement or insights
+- Discuss challenges or opportunities
+- Ask about other AI initiatives they might have
+
+Keep responses concise (1-2 sentences) and engaging. End with a question to keep the conversation going, 
+unless they seem to be wrapping up the discussion."""),
+                MessagesPlaceholder(variable_name="history"),
+                ("human", "User said: {input}")
+            ])
+            
+            # Generate response using limited history
+            limited_history = self._get_limited_history()
+            messages = follow_up_prompt.format_messages(
+                history=limited_history,
+                input=user_input
+            )
+            
+            response = self.llm.invoke(messages)
+            return response.content.strip()
+            
+        except Exception as e:
+            print(f"Error generating follow-up response: {e}")
+            return "That's very interesting! What other AI projects are you excited about working on?"
+    
+    def _detect_new_initiative(self, user_input: str) -> str:
+        """Detect if user mentions a new AI initiative in their input."""
+        try:
+            # Use LLM to detect new initiatives
+            detection_prompt = ChatPromptTemplate.from_messages([
+                ("system", """Analyze the user's message to detect if they mention any NEW AI initiatives or projects 
+that are different from what was already discussed.
+
+Look for phrases like:
+- "we're also working on..."
+- "another project is..."
+- "we have a [project type] project"
+- "planning to build..."
+- "developing a..."
+
+Only extract clear, distinct AI initiatives. Don't extract general AI concepts or technologies.
+
+If you find a new initiative, respond with just the initiative name/description (e.g. "voice assistant", "document analysis system", "fraud detection AI").
+If no new initiative is mentioned, respond with "NONE".
+
+Examples:
+User: "We're also planning a voice assistant project" → "voice assistant project"
+User: "Another initiative is document analysis" → "document analysis initiative" 
+User: "That uses machine learning" → "NONE"
+User: "We also do chatbots" → "NONE" (if chatbot was already discussed)"""),
+                ("human", f"User said: {user_input}")
+            ])
+            
+            response = self.llm.invoke(detection_prompt.format_messages())
+            result = response.content.strip()
+            
+            # Return the initiative if found, None if not
+            if result.upper() == "NONE" or not result:
+                return None
+            
+            print(f"Detected new initiative: {result}")
+            return result
+            
+        except Exception as e:
+            print(f"Error detecting new initiative: {e}")
+            return None
+    
+    def _offer_to_collect_additional_initiative(self, initiative_name: str, user_input: str) -> Dict[str, Any]:
+        """Offer to collect detailed information about the additional initiative."""
+        try:
+            offer_message = f"That sounds like an exciting project! Would you like me to collect some detailed information about your {initiative_name} as well? I can gather the same type of information we discussed for your previous initiative."
+            
+            # Start collecting additional initiative
+            self.collecting_additional = True
+            self.current_additional_data = {field: None for field in self.slots}
+            self.current_additional_data["Initiative"] = initiative_name
+            
+            # Add to conversation history
+            self._add_to_history(AIMessage(content=offer_message))
+            
+            return {
+                "message": offer_message,
+                "status": "follow_up",
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
+            
+        except Exception as e:
+            print(f"Error offering to collect additional initiative: {e}")
+            return {
+                "message": f"That {initiative_name} sounds interesting! Tell me more about it.",
+                "status": "follow_up", 
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
+    
+    def _handle_additional_initiative_collection(self, user_input: str) -> Dict[str, Any]:
+        """Handle collection using existing code by temporarily switching context."""
+        try:
+            # Check if user declines to provide details
+            if self._is_decline_response(user_input):
+                self.collecting_additional = False
+                self.current_additional_data = {}
+                
+                decline_response = "No problem! Is there anything else about your AI initiatives you'd like to discuss?"
+                self._add_to_history(AIMessage(content=decline_response))
+                
+                return {
+                    "message": decline_response,
+                    "status": "follow_up",
+                    "collected_data": self.collected_data.copy(),
+                    "missing_fields": []
+                }
+            
+            # Save original state
+            original_collected_data = self.collected_data.copy()
+            original_in_follow_up = self.in_follow_up_mode
+            
+            try:
+                # Switch to additional initiative collection mode - reuse ALL existing code
+                self.collected_data = self.current_additional_data.copy()
+                self.in_follow_up_mode = False  # Act like normal collection
+                
+                # Use existing process_user_input method completely
+                temp_result = self.process_user_input(user_input)
+                
+                # Copy collected data back
+                self.current_additional_data = self.collected_data.copy()
+                
+                # If collection completed, save and continue follow-up
+                if temp_result['status'] == 'follow_up':  # All fields collected
+                    return self._complete_additional_initiative_collection()
+                
+                # Return the question but keep in follow_up status
+                return {
+                    "message": temp_result['message'],
+                    "status": "follow_up",
+                    "collected_data": original_collected_data,
+                    "missing_fields": []
+                }
+                
+            finally:
+                # Always restore original state
+                self.collected_data = original_collected_data
+                self.in_follow_up_mode = original_in_follow_up
+            
+        except Exception as e:
+            print(f"Error handling additional initiative collection: {e}")
+            return {
+                "message": "Could you please repeat that?",
+                "status": "follow_up",
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
+    
+    def _is_decline_response(self, user_input: str) -> bool:
+        """Check if user declines to provide additional details."""
+        decline_phrases = ["no", "not now", "skip", "maybe later", "not interested", "no thanks"]
+        return any(phrase in user_input.lower() for phrase in decline_phrases)
+    
+    def _is_agreement_response(self, user_input: str) -> bool:
+        """Check if user agrees to provide additional details."""
+        agree_phrases = ["yes", "sure", "ok", "okay", "sounds good", "let's do it", "go ahead"]
+        return any(phrase in user_input.lower() for phrase in agree_phrases)
+    
+    
+    def _complete_additional_initiative_collection(self) -> Dict[str, Any]:
+        """Complete collection of additional initiative and save to CSV."""
+        try:
+            # Save the additional initiative to CSV
+            print(f"Saving additional initiative: {self.current_additional_data}")
+            
+            def save_additional_csv():
+                try:
+                    print(f"Starting background CSV write for additional initiative")
+                    self.update_initiatives_csv(self.current_additional_data)
+                    print(f"Additional initiative saved to CSV successfully")
+                except Exception as e:
+                    print(f"Failed to save additional initiative to CSV: {e}")
+            
+            # Save in background
+            csv_thread = threading.Thread(target=save_additional_csv)
+            csv_thread.daemon = True
+            csv_thread.start()
+            
+            # Add to additional initiatives list
+            self.additional_initiatives.append(self.current_additional_data.copy())
+            
+            # Reset collection state
+            initiative_name = self.current_additional_data.get("Initiative", "the initiative")
+            self.collecting_additional = False
+            self.current_additional_data = {}
+            
+            completion_message = f"Thank you! I've captured all the details about the {initiative_name}. Is there anything else about your AI projects you'd like to discuss?"
+            
+            self._add_to_history(AIMessage(content=completion_message))
+            
+            return {
+                "message": completion_message,
+                "status": "follow_up",
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
+            
+        except Exception as e:
+            print(f"Error completing additional initiative collection: {e}")
+            return {
+                "message": "Thank you for sharing that information! Is there anything else you'd like to discuss?",
+                "status": "follow_up",
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
     
     def get_missing_fields(self) -> List[str]:
         """Get list of fields that still need to be collected."""
@@ -558,8 +840,14 @@ class ConversationSession:
         self.agent = SurveyAgent()
         self.created_at = datetime.now()
         self.last_activity = datetime.now()
-        self.status = "active"  # active, completed, error
+        self.status = "active"  # active, follow_up, completed, error
         self.is_first_turn = True
+        
+        # Start conversation logging
+        log_conversation_event(session_id, "session_started", {
+            "user_id": user_id,
+            "timestamp": self.created_at.isoformat()
+        })
         
     def get_initial_greeting(self) -> str:
         """Get initial greeting for the session."""
@@ -567,6 +855,10 @@ class ConversationSession:
             greeting = self.agent.get_initial_greeting()
             self.is_first_turn = False
             self._update_activity()
+            
+            # Log the initial greeting
+            log_bot_question(self.session_id, greeting, {"type": "initial_greeting"})
+            
             return greeting
         except Exception as e:
             print(f"Error getting greeting: {e}")
@@ -577,14 +869,73 @@ class ConversationSession:
         try:
             self._update_activity()
             
+            # Log user input
+            log_user_answer(self.session_id, user_input)
+            
             # Process through agent
             result = self.agent.process_user_input(user_input)
             
+            # Log bot response
+            log_bot_question(self.session_id, result["message"], {
+                "status": result["status"],
+                "missing_fields": result.get("missing_fields", []),
+                "collected_fields": len([v for v in result.get("collected_data", {}).values() if v])
+            })
+            
+            # Log any extracted fields with the user's answer
+            collected_data = result.get("collected_data", {})
+            if collected_data:
+                non_empty_fields = {k: v for k, v in collected_data.items() if v}
+                if non_empty_fields:
+                    # Update the last user answer log with extracted fields
+                    log_user_answer(self.session_id, user_input, non_empty_fields, {
+                        "extraction_successful": True,
+                        "fields_count": len(non_empty_fields)
+                    })
+            
             # Update session status
-            if result["status"] == "completed":
+            if result["status"] == "follow_up":
+                self.status = "follow_up"
+                # When entering follow-up mode, save the collected data to CSV
+                def csv_with_error_handling():
+                    try:
+                        print(f"Starting background CSV write for session {self.session_id} (follow-up mode)")
+                        self.agent.update_initiatives_csv(result["collected_data"])
+                        print(f"Background CSV write completed for session {self.session_id}")
+                    except Exception as e:
+                        print(f"Background CSV write failed for session {self.session_id}: {e}")
+                
+                csv_thread = threading.Thread(target=csv_with_error_handling)
+                csv_thread.daemon = True
+                csv_thread.start()
+                
+                # Log transition to follow-up mode
+                log_conversation_event(self.session_id, "entered_follow_up_mode", {
+                    "completion_reason": "all_fields_collected",
+                    "collected_data": result["collected_data"]
+                })
+                
+            elif result["status"] == "completed":
                 self.status = "completed"
-                # Update CSV in background (you could make this async)
-                self.agent.update_initiatives_csv(result["collected_data"])
+                
+                # Log conversation completion and save conversation log
+                log_conversation_event(self.session_id, "session_completed", {
+                    "completion_reason": "user_ended_conversation",
+                    "final_data": result["collected_data"]
+                })
+                
+                # Save the complete conversation log to Azure Blob
+                def save_log_with_error_handling():
+                    try:
+                        print(f"Saving conversation log for session {self.session_id}")
+                        save_conversation(self.session_id, self.user_id)
+                        print(f"Conversation log saved for session {self.session_id}")
+                    except Exception as e:
+                        print(f"Failed to save conversation log for session {self.session_id}: {e}")
+                
+                log_thread = threading.Thread(target=save_log_with_error_handling)
+                log_thread.daemon = True
+                log_thread.start()
             
             return result
             
