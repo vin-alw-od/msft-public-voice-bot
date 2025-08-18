@@ -20,7 +20,7 @@ class SurveyAgent:
         # Initialize LLM with better settings
         self.llm = ChatOpenAI(
             temperature=0.1,  # Slight creativity for natural conversation
-            model="gpt-4",
+            model="gpt-4o-mini",  # Use GPT-4 mini for higher rate limits
             max_tokens=1000,
             timeout=90  # Match LLMService.cs timeout
         )
@@ -460,15 +460,92 @@ Keep it concise and engaging - just 2-3 sentences."""),
             return []
     
     def update_initiatives_csv(self, initiative_data: Dict[str, Any]):
-        """Update initiatives CSV with new data."""
+        """Update AI_Initiatives.csv with new initiative in Azure Blob Storage."""
         try:
-            # This would implement the CSV update logic
-            # For now, just log the data
-            print(f"Would update CSV with: {initiative_data}")
-            return True
+            import pandas as pd
+            from io import StringIO
+            import requests
             
+            # Azure Blob Storage URLs with SAS token
+            sas_token = os.getenv("AZURE_STORAGE_SAS_TOKEN", "")
+            base_url = "https://acu1tmagentbotd1saglobal.blob.core.windows.net/csvdata"
+            
+            if not sas_token:
+                print("ERROR: No SAS token available - cannot write to Azure Blob")
+                return False
+                
+            initiatives_csv_url = f"{base_url}/AI_Initiatives.csv?{sas_token}"
+            
+            print(f"DEBUG: Updating CSV at Azure Blob Storage")
+            
+            # Read existing initiatives from Azure Blob
+            try:
+                initiatives_response = requests.get(initiatives_csv_url, timeout=30)
+                if initiatives_response.status_code == 200:
+                    initiatives_csv = StringIO(initiatives_response.text)
+                    df = pd.read_csv(initiatives_csv)
+                    print(f"DEBUG: Read {len(df)} existing initiatives from Azure Blob")
+                else:
+                    # File doesn't exist yet, create new DataFrame
+                    df = pd.DataFrame(columns=self.slots)
+                    print(f"DEBUG: No existing initiatives file found, creating new one")
+            except Exception as e:
+                print(f"DEBUG: Error reading from Azure Blob, creating new DataFrame: {e}")
+                df = pd.DataFrame(columns=self.slots)
+            
+            # Check if initiative already exists
+            if 'Initiative' in initiative_data and initiative_data['Initiative']:
+                initiative_name = initiative_data['Initiative']
+                existing_idx = df[df['Initiative'] == initiative_name].index
+                
+                if len(existing_idx) > 0:
+                    # Update existing initiative
+                    print(f"DEBUG: Updating existing initiative: {initiative_name}")
+                    for field, value in initiative_data.items():
+                        if value is not None and value != "":
+                            df.loc[existing_idx[0], field] = value
+                else:
+                    # Add new initiative
+                    print(f"DEBUG: Adding new initiative: {initiative_name}")
+                    new_row = {field: None for field in self.slots}
+                    new_row.update(initiative_data)
+                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            else:
+                # Add as new initiative without name
+                print(f"DEBUG: Adding new initiative without name")
+                new_row = {field: None for field in self.slots}
+                new_row.update(initiative_data)
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            
+            # Save updated DataFrame back to Azure Blob
+            csv_string = df.to_csv(index=False)
+            print(f"DEBUG: Generated CSV data with {len(df)} initiatives")
+            
+            # Upload back to Azure Blob using PUT request
+            if sas_token:
+                upload_url = f"{base_url}/AI_Initiatives.csv?{sas_token}"
+                headers = {
+                    'x-ms-blob-type': 'BlockBlob',
+                    'Content-Type': 'text/csv'
+                }
+                
+                upload_response = requests.put(upload_url, data=csv_string, headers=headers, timeout=30)
+                
+                if upload_response.status_code in [200, 201]:
+                    print(f"DEBUG: Successfully uploaded AI_Initiatives.csv to Azure Blob")
+                    return True
+                else:
+                    print(f"DEBUG: Failed to upload to Azure Blob. Status: {upload_response.status_code}")
+                    print(f"DEBUG: Response: {upload_response.text}")
+                    return False
+            else:
+                print(f"DEBUG: No SAS token available - cannot upload to Azure Blob")
+                return False
+                
         except Exception as e:
-            print(f"Error updating CSV: {e}")
+            print(f"ERROR: Error updating CSV file: {str(e)}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
             return False
 
 
