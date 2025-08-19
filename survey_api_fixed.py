@@ -57,6 +57,19 @@ async def cleanup_expired_sessions():
                     expired_sessions.append(session_id)
             
             for session_id in expired_sessions:
+                session = active_sessions[session_id]
+                
+                # Save CSV data before cleanup if session has collected data
+                try:
+                    if hasattr(session, 'agent') and session.agent.collected_data:
+                        collected_fields = sum(1 for v in session.agent.collected_data.values() if v)
+                        if collected_fields > 0:
+                            print(f"Saving CSV data for expired session {session_id} ({collected_fields} fields collected)")
+                            session.agent.update_initiatives_csv(session.agent.collected_data.copy())
+                            print(f"CSV data saved for expired session {session_id}")
+                except Exception as e:
+                    print(f"Failed to save CSV data for expired session {session_id}: {e}")
+                
                 del active_sessions[session_id]
                 print(f"Cleaned up expired session: {session_id}")
             
@@ -216,9 +229,39 @@ async def end_session(session_id: str):
     if session_id not in active_sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Get final status before deletion
+    # Get session before deletion
     session = active_sessions[session_id]
     final_status = session.get_status()
+    
+    # Save CSV data and conversation log before deleting session
+    try:
+        # Save CSV data if session has collected data
+        if hasattr(session, 'agent') and session.agent.collected_data:
+            collected_fields = sum(1 for v in session.agent.collected_data.values() if v)
+            if collected_fields > 0:
+                print(f"Saving CSV data for manually ended session {session_id} ({collected_fields} fields collected)")
+                session.agent.update_initiatives_csv(session.agent.collected_data.copy())
+                print(f"CSV data saved for manually ended session {session_id}")
+    except Exception as e:
+        print(f"Failed to save CSV data for manually ended session {session_id}: {e}")
+    
+    try:
+        from conversation_logger import log_conversation_event, save_conversation
+        
+        # Log manual session termination
+        log_conversation_event(session_id, "session_manually_ended", {
+            "termination_reason": "manual_deletion",
+            "final_status": session.status,
+            "collected_data": session.agent.collected_data
+        })
+        
+        # Save the complete conversation log
+        print(f"Saving conversation log for manually ended session {session_id}")
+        save_conversation(session_id, session.user_id)
+        print(f"Conversation log saved for manually ended session {session_id}")
+        
+    except Exception as e:
+        print(f"Failed to save conversation log for manually ended session {session_id}: {e}")
     
     # Delete session
     del active_sessions[session_id]

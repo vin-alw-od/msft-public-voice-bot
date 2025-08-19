@@ -14,6 +14,30 @@ import threading
 from datetime import datetime, timedelta
 from conversation_logger import log_bot_question, log_user_answer, log_conversation_event, save_conversation
 
+# Configuration for logging features
+ENABLE_LATENCY_LOGGING = os.getenv("ENABLE_LATENCY_LOGGING", "true").lower() == "true"
+ENABLE_EXTRACTION_FAILURE_LOGGING = os.getenv("ENABLE_EXTRACTION_FAILURE_LOGGING", "true").lower() == "true"
+MAX_LOGGING_LATENCY_MS = float(os.getenv("MAX_LOGGING_LATENCY_MS", "50"))  # Disable logging if it takes too long
+
+def safe_log_event(session_id: str, event: str, data: Dict, max_time_ms: float = MAX_LOGGING_LATENCY_MS):
+    """Safely log events with performance budget and proper error handling."""
+    if not ENABLE_LATENCY_LOGGING and "latency" in event:
+        return
+    if not ENABLE_EXTRACTION_FAILURE_LOGGING and "failure" in event:
+        return
+        
+    log_start = datetime.now()
+    try:
+        log_conversation_event(session_id, event, data)
+    except Exception as e:
+        # Log to console but don't fail the main operation
+        print(f"WARNING: Logging failed for {event}: {e}")
+    finally:
+        # Check if logging took too long
+        log_duration = (datetime.now() - log_start).total_seconds() * 1000
+        if log_duration > max_time_ms:
+            print(f"WARNING: Logging {event} took {log_duration:.1f}ms (max: {max_time_ms}ms)")
+
 
 class SurveyAgent:
     """Enhanced SurveyAgent with proper LangChain implementation and conversation management."""
@@ -281,9 +305,23 @@ Keep it concise and engaging - just 2-3 sentences."""),
                 user_response=user_input
             )
             
-            # Get extraction response
-            response = self.llm.invoke(extraction_messages)
-            content = response.content.strip()
+            # Get extraction response with timing
+            if ENABLE_LATENCY_LOGGING:
+                llm_start = datetime.now()
+                response = self.llm.invoke(extraction_messages)
+                llm_end = datetime.now()
+                llm_latency_ms = (llm_end - llm_start).total_seconds() * 1000
+                
+                content = response.content.strip()
+                
+                # Log LLM latency for extraction
+                safe_log_event(getattr(self, 'session_id', 'unknown'), "llm_extraction_latency", {
+                    "latency_ms": round(llm_latency_ms, 2),
+                    "response_length": len(content)
+                })
+            else:
+                response = self.llm.invoke(extraction_messages)
+                content = response.content.strip()
             
             # Parse JSON response
             try:
@@ -301,12 +339,32 @@ Keep it concise and engaging - just 2-3 sentences."""),
                             if cleaned_value:
                                 self.collected_data[field] = cleaned_value
                                 print(f"Extracted {field}: {cleaned_value}")
+                else:
+                    # Log when no JSON found in LLM response
+                    if ENABLE_EXTRACTION_FAILURE_LOGGING:
+                        safe_log_event(getattr(self, 'session_id', 'unknown'), "extraction_failure", {
+                            "reason": "no_json_in_response",
+                            "llm_response": content[:200]
+                        })
                 
             except json.JSONDecodeError as e:
                 print(f"JSON parsing error: {e}")
+                # Log extraction failure for audit
+                if ENABLE_EXTRACTION_FAILURE_LOGGING:
+                    safe_log_event(getattr(self, 'session_id', 'unknown'), "extraction_failure", {
+                        "reason": "json_parse_error", 
+                        "llm_response": content[:200],
+                        "error": str(e)
+                    })
                 
         except Exception as e:
             print(f"Extraction error: {e}")
+            # Log extraction failure for audit
+            if ENABLE_EXTRACTION_FAILURE_LOGGING:
+                safe_log_event(getattr(self, 'session_id', 'unknown'), "extraction_failure", {
+                    "reason": "llm_error",
+                    "error": str(e)
+                })
     
     def _clean_field_value(self, field: str, value: Any) -> Any:
         """Clean and validate field values."""
@@ -372,7 +430,21 @@ Keep it concise and engaging - just 2-3 sentences."""),
                 input=f"Context: {context}\n\nNext field needed: {next_field} - {self.definitions[next_field]}\n\nUser just said: {user_input}"
             )
             
-            response = self.llm.invoke(messages)
+            # Generate question with timing
+            if ENABLE_LATENCY_LOGGING:
+                llm_start = datetime.now()
+                response = self.llm.invoke(messages)
+                llm_end = datetime.now()
+                llm_latency_ms = (llm_end - llm_start).total_seconds() * 1000
+                
+                # Log LLM latency for question generation
+                safe_log_event(getattr(self, 'session_id', 'unknown'), "llm_question_latency", {
+                    "latency_ms": round(llm_latency_ms, 2),
+                    "field": next_field
+                })
+            else:
+                response = self.llm.invoke(messages)
+            
             return response.content.strip()
             
         except Exception as e:
@@ -432,7 +504,7 @@ Keep it concise and engaging - just 2-3 sentences."""),
     
     def _create_completion_response(self) -> Dict[str, Any]:
         """Create response for completed conversation with follow-up question."""
-        follow_up_message = "Thank you! I've gathered all the information about your AI initiative. This will be very helpful for our analysis. Is there anything else about your AI projects or initiatives you'd like to discuss or share?"
+        follow_up_message = "Thank you for connecting with me! I'm here to learn about AI initiatives at your organization. Is there anything about your AI projects or plans you'd like to discuss or share?"
         return {
             "message": follow_up_message,
             "status": "follow_up",  # Changed from "completed" to allow continued conversation
@@ -838,6 +910,7 @@ class ConversationSession:
         self.session_id = session_id
         self.user_id = user_id
         self.agent = SurveyAgent()
+        self.agent.session_id = session_id  # Pass session_id to agent for logging
         self.created_at = datetime.now()
         self.last_activity = datetime.now()
         self.status = "active"  # active, follow_up, completed, error
@@ -866,6 +939,7 @@ class ConversationSession:
     
     def process_input(self, user_input: str) -> Dict[str, Any]:
         """Process user input and return response."""
+        start_time = datetime.now() if ENABLE_LATENCY_LOGGING else None
         try:
             self._update_activity()
             
@@ -936,6 +1010,17 @@ class ConversationSession:
                 log_thread = threading.Thread(target=save_log_with_error_handling)
                 log_thread.daemon = True
                 log_thread.start()
+            
+            # Log processing latency (thread-safe)
+            if ENABLE_LATENCY_LOGGING and start_time:
+                end_time = datetime.now()
+                latency_ms = (end_time - start_time).total_seconds() * 1000
+                safe_log_event(self.session_id, "processing_latency", {
+                    "total_ms": round(latency_ms, 2),
+                    "status": result["status"],
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat()
+                })
             
             return result
             
