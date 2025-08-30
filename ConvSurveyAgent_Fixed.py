@@ -66,6 +66,7 @@ class SurveyAgent:
         self.additional_initiatives = []  # Track additional initiatives mentioned in follow-up
         self.collecting_additional = False  # Track if we're collecting data for additional initiative
         self.current_additional_data = {}  # Data for current additional initiative being collected
+        self.awaiting_exit_confirmation = False  # Track if we're waiting for exit confirmation
         
     def _load_configuration(self):
         """Load Azure storage configuration."""
@@ -117,11 +118,21 @@ class SurveyAgent:
             
         except Exception as e:
             print(f"Error loading slots: {e}")
-            # Fallback slots
+            # Fallback slots with improved definitions
             self.slots = ["Initiative", "Type of AI", "Current Stage", "Budget", 
                          "Business Objectives", "Success Metrics", "Department", 
                          "Tech Stack", "Next Steps"]
-            self.definitions = {slot: f"Information about {slot}" for slot in self.slots}
+            self.definitions = {
+                "Initiative": "Name or description of the AI project or initiative (e.g., 'customer service chatbot', 'fraud detection system', 'document analyzer')",
+                "Type of AI": "Category of AI technology being used (e.g., 'machine learning', 'natural language processing', 'computer vision', 'generative AI', 'agentic AI', 'deep learning')",
+                "Current Stage": "Current phase of project execution (e.g., 'ideation', 'development', 'testing', 'UAT', 'pilot', 'production', 'deployed')",
+                "Budget": "Financial budget or investment amount for the initiative (e.g., '$500K', '$2.5M', '1 million dollars', '750K USD')",
+                "Business Objectives": "High-level business goals the initiative aims to achieve (e.g., 'improve customer satisfaction', 'reduce operational costs', 'increase productivity', 'enhance user experience')",
+                "Success Metrics": "Specific measurable outcomes to track success (e.g., '30% faster response time', 'reduce errors by 50%', '95% accuracy rate', 'improve SLA by 40%')",
+                "Department": "Department or team responsible for the initiative (e.g., 'IT', 'HR', 'Finance', 'Marketing', 'Engineering', 'Customer Service')",
+                "Tech Stack": "Specific technologies, tools, platforms, or frameworks used (e.g., 'Azure OpenAI', 'Python and TensorFlow', 'React and Node.js', 'AWS Lambda', 'Microsoft .NET')",
+                "Next Steps": "Planned future actions or milestones (e.g., 'complete pilot testing', 'deploy to production', 'expand to more users', 'build and deploy', 'start development')"
+            }
     
     def _build_url(self, filename: str) -> str:
         """Build Azure blob URL with optional SAS token."""
@@ -233,13 +244,20 @@ Keep it concise and engaging - just 2-3 sentences."""),
     def process_user_input(self, user_input: str) -> Dict[str, Any]:
         """Process user input and return response with extracted data."""
         try:
-            # Handle exit conditions
-            if self._is_exit_command(user_input):
+            # Handle exit confirmation if we're waiting for one
+            if self.awaiting_exit_confirmation:
+                return self._handle_exit_confirmation_response(user_input)
+            
+            # Handle clear exit commands (immediate exit)
+            if self._is_clear_exit_command(user_input):
                 if self.in_follow_up_mode:
-                    # In follow-up mode, exit commands should actually complete the session
                     return self._create_final_completion_response()
                 else:
                     return self._create_completion_response()
+            
+            # Handle ambiguous exit phrases (need confirmation)
+            if self._contains_ambiguous_exit_phrase(user_input) and self.in_follow_up_mode:
+                return self._create_exit_confirmation_request()
             
             # Add user message to history
             self._add_to_history(HumanMessage(content=user_input))
@@ -280,17 +298,21 @@ Keep it concise and engaging - just 2-3 sentences."""),
                 "missing_fields": self.get_missing_fields()
             }
     
-    def _is_exit_command(self, user_input: str) -> bool:
-        """Check if user wants to exit the conversation."""
-        exit_phrases = ["bye", "exit", "quit", "end", "stop", "done", "finish"]
+    def _is_clear_exit_command(self, user_input: str) -> bool:
+        """Check if user clearly wants to exit (immediate exit)."""
+        clear_exit_phrases = ["bye", "goodbye", "see you", "thanks bye", "thank you bye"]
         input_lower = user_input.lower().strip()
-        
-        # Don't exit on simple "no" responses - they might be answering a question
-        if input_lower in ["no", "n"]:
-            # Only exit if no data collected yet or explicitly saying goodbye
-            return len([v for v in self.collected_data.values() if v]) == 0
-        
-        return any(phrase in input_lower for phrase in exit_phrases)
+        return any(phrase in input_lower for phrase in clear_exit_phrases)
+    
+    def _contains_ambiguous_exit_phrase(self, user_input: str) -> bool:
+        """Check if user input contains ambiguous exit phrases that need confirmation."""
+        ambiguous_phrases = ["done", "finished", "that's all", "stop here", "end the", "we're done"]
+        input_lower = user_input.lower().strip()
+        return any(phrase in input_lower for phrase in ambiguous_phrases)
+    
+    def _is_exit_command(self, user_input: str) -> bool:
+        """Legacy method - now only handles clear exits for backward compatibility."""
+        return self._is_clear_exit_command(user_input)
     
     def _extract_fields_from_input(self, user_input: str):
         """Extract field information from user input using LLM."""
@@ -520,6 +542,45 @@ Keep it concise and engaging - just 2-3 sentences."""),
             "collected_data": self.collected_data.copy(),
             "missing_fields": []
         }
+    
+    def _create_exit_confirmation_request(self) -> Dict[str, Any]:
+        """Create response asking user to confirm they want to exit."""
+        self.awaiting_exit_confirmation = True
+        return {
+            "message": "Are you finished discussing your AI initiatives, or would you like to continue our conversation?",
+            "status": "confirming_exit",
+            "collected_data": self.collected_data.copy(),
+            "missing_fields": []
+        }
+    
+    def _handle_exit_confirmation_response(self, user_input: str) -> Dict[str, Any]:
+        """Handle user response to exit confirmation."""
+        self.awaiting_exit_confirmation = False
+        input_lower = user_input.lower().strip()
+        
+        # Check if user confirms they want to exit
+        exit_confirmations = ["yes", "yeah", "yep", "finished", "done", "exit", "quit"]
+        continue_phrases = ["no", "continue", "keep going", "more", "not yet"]
+        
+        if any(phrase in input_lower for phrase in exit_confirmations):
+            return self._create_final_completion_response()
+        elif any(phrase in input_lower for phrase in continue_phrases):
+            # Return to follow-up mode
+            return {
+                "message": "Great! What else would you like to discuss about your AI initiatives?",
+                "status": "follow_up",
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
+        else:
+            # Unclear response, ask again
+            self.awaiting_exit_confirmation = True
+            return {
+                "message": "I'm not sure if you'd like to continue or finish. Could you please say 'continue' to keep discussing or 'finished' to end our conversation?",
+                "status": "confirming_exit",
+                "collected_data": self.collected_data.copy(),
+                "missing_fields": []
+            }
     
     def _handle_follow_up_conversation(self, user_input: str) -> Dict[str, Any]:
         """Handle general conversation after all required fields are collected."""

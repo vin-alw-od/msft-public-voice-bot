@@ -86,8 +86,28 @@ namespace EchoBot
             // Add HTTP client for LLM API (this also registers ILLMService as transient)
             builder.Services.AddHttpClient<ILLMService, LLMService>();
             
-            // Add Speech services
-            builder.Services.AddSingleton<ISpeechService, Services.SpeechService>();
+            // Add Speech services with Silero VAD integration
+            builder.Services.AddSingleton<ISileroVADClient, SileroVADClient>();
+            
+            // Use HybridSpeechService if Silero VAD is available, otherwise use standard SpeechService
+            builder.Services.AddSingleton<ISpeechService>(serviceProvider =>
+            {
+                var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+                var sileroEnabled = configuration.GetValue<bool>("SileroVAD:Enabled", false);
+                
+                if (sileroEnabled)
+                {
+                    var logger = serviceProvider.GetRequiredService<ILogger<HybridSpeechService>>();
+                    var sileroClient = serviceProvider.GetRequiredService<ISileroVADClient>();
+                    return new HybridSpeechService(configuration, logger, sileroClient);
+                }
+                else
+                {
+                    var logger = serviceProvider.GetRequiredService<ILogger<Services.SpeechService>>();
+                    return new Services.SpeechService(configuration, logger);
+                }
+            });
+            
             builder.Services.AddSingleton<LLMSpeechService>();
 
             // Bot Settings Setup
