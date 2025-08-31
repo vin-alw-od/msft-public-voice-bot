@@ -8,7 +8,7 @@ namespace EchoBot.Controllers
     /// This is for testing only - does not affect production functionality
     /// </summary>
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("openaitest")]
     public class OpenAIRealtimeTestController : ControllerBase
     {
         private readonly OpenAIRealtimeAudioService _realtimeService;
@@ -24,7 +24,7 @@ namespace EchoBot.Controllers
 
         /// <summary>
         /// Test connectivity to OpenAI Realtime API
-        /// GET: api/openairealtime/test-connection
+        /// GET: openaitest/test-connection
         /// </summary>
         [HttpGet("test-connection")]
         public async Task<IActionResult> TestConnection()
@@ -63,7 +63,7 @@ namespace EchoBot.Controllers
 
         /// <summary>
         /// Test simple text conversation
-        /// POST: api/openairealtime/test-conversation
+        /// POST: openaitest/test-conversation
         /// </summary>
         [HttpPost("test-conversation")]
         public async Task<IActionResult> TestConversation([FromBody] TestConversationRequest request)
@@ -95,7 +95,7 @@ namespace EchoBot.Controllers
 
         /// <summary>
         /// Get service status and configuration
-        /// GET: api/openairealtime/status
+        /// GET: openaitest/status
         /// </summary>
         [HttpGet("status")]
         public IActionResult GetStatus()
