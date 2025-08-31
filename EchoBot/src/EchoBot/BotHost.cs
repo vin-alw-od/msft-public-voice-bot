@@ -109,6 +109,9 @@ namespace EchoBot
             });
             
             builder.Services.AddSingleton<LLMSpeechService>();
+            
+            // Add OpenAI Realtime Audio Service (Proof of Concept - parallel implementation)
+            builder.Services.AddSingleton<OpenAIRealtimeAudioService>();
 
             // Bot Settings Setup
             var botInternalHostingProtocol = "https";
