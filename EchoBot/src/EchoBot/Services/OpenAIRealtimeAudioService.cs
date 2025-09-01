@@ -98,6 +98,9 @@ namespace EchoBot.Services
                         ? new Uri(_endpoint) 
                         : new Uri($"{_endpoint}?model={_model}");
                     
+                    _logger.LogInformation("Attempting WebSocket connection to: {ActualUri}", uri.ToString());
+                    _logger.LogInformation("Using headers: {HeaderType}", _endpoint.Contains("cognitiveservices.azure.com") ? "api-key" : "Bearer token");
+                    
                     var cancellationToken = new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token;
                     await _webSocket.ConnectAsync(uri, cancellationToken);
                     
