@@ -33,22 +33,30 @@ namespace EchoBot.Bot
         private readonly LLMSpeechService _llmSpeechService;
 
         /// <summary>
+        /// The OpenAI Realtime Audio service for all-in-one processing
+        /// </summary>
+        private readonly OpenAIRealtimeAudioService _openAIRealtimeService;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="CallHandler" /> class.
         /// </summary>
         /// <param name="statefulCall">The stateful call.</param>
         /// <param name="settings">The settings.</param>
         /// <param name="logger"></param>
         /// <param name="llmSpeechService">The LLM Speech service for processing audio</param>
+        /// <param name="openAIRealtimeService">The OpenAI Realtime Audio service</param>
         public CallHandler(
             ICall statefulCall,
             AppSettings settings,
             ILogger logger,
-            LLMSpeechService llmSpeechService
+            LLMSpeechService llmSpeechService,
+            OpenAIRealtimeAudioService openAIRealtimeService = null
         )
             : base(TimeSpan.FromMinutes(10), statefulCall?.GraphLogger)
         {
             this.Call = statefulCall;
             this._llmSpeechService = llmSpeechService;
+            this._openAIRealtimeService = openAIRealtimeService;
             this.Call.OnUpdated += this.CallOnUpdated;
             this.Call.Participants.OnUpdated += this.ParticipantsOnUpdated;
 
@@ -58,7 +66,7 @@ namespace EchoBot.Bot
                 _llmSpeechService.SetCurrentCallId(this.Call.Id);
             }
 
-            this.BotMediaStream = new BotMediaStream(this.Call.GetLocalMediaSession(), this.Call.Id, this.GraphLogger, logger, settings, llmSpeechService);
+            this.BotMediaStream = new BotMediaStream(this.Call.GetLocalMediaSession(), this.Call.Id, this.GraphLogger, logger, settings, llmSpeechService, openAIRealtimeService);
         }
 
         /// <inheritdoc/>

@@ -67,6 +67,11 @@ namespace EchoBot.Bot
         private readonly LLMSpeechService _llmSpeechService;
 
         /// <summary>
+        /// The OpenAI Realtime Audio service for all-in-one processing
+        /// </summary>
+        private readonly OpenAIRealtimeAudioService _openAIRealtimeService;
+
+        /// <summary>
         /// Gets the collection of call handlers.
         /// </summary>
         /// <value>The call handlers.</value>
@@ -100,13 +105,15 @@ namespace EchoBot.Bot
             ILogger<BotService> logger,
             IOptions<AppSettings> settings,
             IBotMediaLogger mediaLogger,
-            LLMSpeechService llmSpeechService)
+            LLMSpeechService llmSpeechService,
+            OpenAIRealtimeAudioService openAIRealtimeService = null)
         {
             _graphLogger = graphLogger;
             _logger = logger;
             _settings = settings.Value;
             _mediaPlatformLogger = mediaLogger;
             _llmSpeechService = llmSpeechService;
+            _openAIRealtimeService = openAIRealtimeService;
         }
 
         /// <summary>
@@ -326,7 +333,7 @@ namespace EchoBot.Bot
         {
             foreach (var call in args.AddedResources)
             {
-                var callHandler = new CallHandler(call, _settings, _logger, _llmSpeechService);
+                var callHandler = new CallHandler(call, _settings, _logger, _llmSpeechService, _openAIRealtimeService);
                 var threadId = call.Resource.ChatInfo.ThreadId;
                 this.CallHandlers[threadId] = callHandler;
             }

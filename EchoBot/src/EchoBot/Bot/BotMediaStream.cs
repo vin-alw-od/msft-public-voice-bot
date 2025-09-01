@@ -53,6 +53,7 @@ namespace EchoBot.Bot
         private List<AudioMediaBuffer> audioMediaBuffers = new List<AudioMediaBuffer>();
         private int shutdown;
         private readonly LLMSpeechService _llmSpeechService;
+        private readonly OpenAIRealtimeAudioService _openAIRealtimeService;
         private readonly string _callId;
 
         /// <summary>
@@ -71,7 +72,8 @@ namespace EchoBot.Bot
             IGraphLogger graphLogger,
             ILogger logger,
             AppSettings settings,
-            LLMSpeechService llmSpeechService
+            LLMSpeechService llmSpeechService,
+            OpenAIRealtimeAudioService openAIRealtimeService = null
         )
             : base(graphLogger)
         {
@@ -83,6 +85,7 @@ namespace EchoBot.Bot
             _logger = logger;
             _callId = callId;
             _llmSpeechService = llmSpeechService;
+            _openAIRealtimeService = openAIRealtimeService;
 
             this.participants = new List<IParticipant>();
 
@@ -102,8 +105,17 @@ namespace EchoBot.Bot
 
             this._audioSocket.AudioMediaReceived += this.OnAudioMediaReceived;
 
-            if (_settings.UseSpeechService && _llmSpeechService != null)
+            // Configure audio processing service based on settings
+            if (_settings.UseOpenAIRealtime && _openAIRealtimeService != null)
             {
+                // Use OpenAI Realtime for all-in-one audio processing
+                _logger.LogInformation("Using OpenAI Realtime Audio Service for call processing");
+                // TODO: Hook up OpenAI Realtime audio events
+            }
+            else if (_settings.UseSpeechService && _llmSpeechService != null)
+            {
+                // Use traditional Azure Speech + LLM pipeline
+                _logger.LogInformation("Using Azure Speech + LLM pipeline for call processing");
                 _llmSpeechService.AudioResponse += this.OnLLMAudioResponse;
             }
         }

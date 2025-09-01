@@ -79,11 +79,24 @@ namespace EchoBot.Services
 
                     _webSocket = new ClientWebSocket();
                     
-                    // Add required headers
-                    _webSocket.Options.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
-                    _webSocket.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
+                    // Add required headers for Azure OpenAI
+                    if (_endpoint.Contains("cognitiveservices.azure.com"))
+                    {
+                        // Azure OpenAI endpoint
+                        _webSocket.Options.SetRequestHeader("api-key", _apiKey);
+                        _webSocket.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
+                    }
+                    else
+                    {
+                        // Standard OpenAI endpoint
+                        _webSocket.Options.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
+                        _webSocket.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
+                    }
                     
-                    var uri = new Uri($"{_endpoint}?model={_model}");
+                    // Azure endpoint already includes deployment and api-version parameters
+                    var uri = _endpoint.Contains("cognitiveservices.azure.com") 
+                        ? new Uri(_endpoint) 
+                        : new Uri($"{_endpoint}?model={_model}");
                     
                     var cancellationToken = new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token;
                     await _webSocket.ConnectAsync(uri, cancellationToken);

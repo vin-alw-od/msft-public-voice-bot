@@ -61,6 +61,12 @@ namespace EchoBot
         public bool UseSpeechService { get; set; }
 
         /// <summary>
+        /// Gets or sets if the bot should use OpenAI Realtime API
+        /// for all-in-one audio processing (VAD + STT + LLM + TTS)
+        /// </summary>
+        public bool UseOpenAIRealtime { get; set; }
+
+        /// <summary>
         /// Gets or sets the Speech Service key
         /// </summary>
         public string SpeechConfigKey { get; set; }
