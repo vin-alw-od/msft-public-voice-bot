@@ -106,16 +106,17 @@ namespace EchoBot.Bot
             this._audioSocket.AudioMediaReceived += this.OnAudioMediaReceived;
 
             // Configure audio processing service based on settings
-            if (_settings.UseOpenAIRealtime && _openAIRealtimeService != null)
+            // HARDCODED FOR TESTING: Force OpenAI Realtime usage
+            if (_openAIRealtimeService != null)
             {
                 // Use OpenAI Realtime for all-in-one audio processing
-                _logger.LogInformation("Using OpenAI Realtime Audio Service for call processing");
+                _logger.LogInformation("🔥 HARDCODED: Using OpenAI Realtime Audio Service for call processing");
                 // TODO: Hook up OpenAI Realtime audio events
             }
             else if (_settings.UseSpeechService && _llmSpeechService != null)
             {
                 // Use traditional Azure Speech + LLM pipeline
-                _logger.LogInformation("Using Azure Speech + LLM pipeline for call processing");
+                _logger.LogInformation("Using Azure Speech + LLM pipeline for call processing (OpenAI service not available)");
                 _llmSpeechService.AudioResponse += this.OnLLMAudioResponse;
             }
         }
