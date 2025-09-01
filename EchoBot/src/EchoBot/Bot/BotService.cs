@@ -15,6 +15,7 @@ using EchoBot.Authentication;
 using EchoBot.Constants;
 using EchoBot.Media;
 using EchoBot.Models;
+using EchoBot.Services;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
 using Microsoft.Graph.Communications.Calls;
