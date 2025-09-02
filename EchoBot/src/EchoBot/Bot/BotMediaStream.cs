@@ -106,8 +106,19 @@ namespace EchoBot.Bot
             this._audioSocket.AudioMediaReceived += this.OnAudioMediaReceived;
 
             // Configure audio processing service based on settings
-            // HARDCODED FOR TESTING: Force OpenAI Realtime usage
+            // DIAGNOSTIC: Log service injection status
+            _logger.LogInformation("🔍 SERVICE INJECTION STATUS:");
+            _logger.LogInformation("  OpenAI Realtime Service: {OpenAIStatus}", _openAIRealtimeService != null ? "INJECTED" : "NULL");
+            _logger.LogInformation("  LLM Speech Service: {LLMStatus}", _llmSpeechService != null ? "INJECTED" : "NULL");
+            _logger.LogInformation("  UseSpeechService Setting: {UseSpeechService}", _settings.UseSpeechService);
+            
             if (_openAIRealtimeService != null)
+            {
+                _logger.LogInformation("  OpenAI Service Configured: {IsConfigured}", _openAIRealtimeService.IsConfigured);
+            }
+            
+            // HARDCODED FOR TESTING: Force OpenAI Realtime usage
+            if (_openAIRealtimeService != null && _openAIRealtimeService.IsConfigured)
             {
                 // Use OpenAI Realtime for all-in-one audio processing
                 _logger.LogInformation("🔥 HARDCODED: Using OpenAI Realtime Audio Service for call processing");
@@ -116,7 +127,7 @@ namespace EchoBot.Bot
             else if (_settings.UseSpeechService && _llmSpeechService != null)
             {
                 // Use traditional Azure Speech + LLM pipeline
-                _logger.LogInformation("Using Azure Speech + LLM pipeline for call processing (OpenAI service not available)");
+                _logger.LogInformation("Using Azure Speech + LLM pipeline for call processing (OpenAI service not available or not configured)");
                 _llmSpeechService.AudioResponse += this.OnLLMAudioResponse;
             }
         }
